@@ -136,6 +136,7 @@ Return ONLY a valid JSON object — no markdown fences, no explanation.
 Rules: hotel_n = 1-based index in hotels array (or null). Mark booked = (booked), recommended = (recommended).
 Extract ALL days. Extract ALL contacts groups (Italian office, local office, guides, drivers, etc.) — include every phone number listed. Phone numbers must include country code with + prefix. Extract ALL flights (outbound and return) including flight number, airports with IATA codes, departure/arrival times, and duration.
 For timeline times: use exact times from the itinerary (e.g. "09:00"). If no time is given, use a natural label like "Morning", "Afternoon", "Evening", "Lunch", "Dinner" — NEVER invent or estimate times that are not in the source text.
+IMPORTANT: Write "trip_subtitle" in the same language as the "language" field you detect. Examples: EN → "7 Days · 6 Nights · May 2026", IT → "7 Giorni · 6 Notti · Maggio 2026", FR → "7 Jours · 6 Nuits · Mai 2026".
 
 ITINERARY:
 """
@@ -281,17 +282,29 @@ LABELS = {
           "itinerary":"Itinerary","map":"📍 Map","call":"📞 Call","web":"🌐 Website",
           "powered":"Powered by Loomtrip","select_ch":"Select a chapter",
           "ch_avail":f"{len(audio_chapters)} chapters available",
-          "emergency":"🚨 CALL","welcome":"welcome to your trip"},
+          "emergency":"🚨 CALL","welcome":"welcome to your trip",
+          "tonight":"Tonight","crafted":"Crafted by",
+          "flights":"Flights","outbound":"✈️ Outbound","return_f":"🏠 Return",
+          "your_team":"Your dedicated team","this_app":"This App",
+          "app_desc":"Your complete trip — programme, hotels, audio guide and emergency contacts."},
     "it":{"days":"Giorni","hotels":"Hotel","audio":"Audio","info":"Info","sos":"SOS",
           "itinerary":"Programma","map":"📍 Mappa","call":"📞 Chiama","web":"🌐 Sito",
           "powered":"Powered by Loomtrip","select_ch":"Seleziona un capitolo",
           "ch_avail":f"{len(audio_chapters)} capitoli disponibili",
-          "emergency":"🚨 CHIAMA","welcome":"benvenuti nel vostro viaggio"},
+          "emergency":"🚨 CHIAMA","welcome":"benvenuti nel vostro viaggio",
+          "tonight":"Stanotte","crafted":"A cura di",
+          "flights":"Voli","outbound":"✈️ Andata","return_f":"🏠 Ritorno",
+          "your_team":"Il vostro team dedicato","this_app":"Questa App",
+          "app_desc":"Il vostro viaggio completo — programma, hotel, audio guida e contatti d'emergenza."},
     "fr":{"days":"Jours","hotels":"Hôtels","audio":"Audio","info":"Infos","sos":"SOS",
           "itinerary":"Programme","map":"📍 Carte","call":"📞 Appeler","web":"🌐 Site",
           "powered":"Powered by Loomtrip","select_ch":"Choisissez un chapitre",
           "ch_avail":f"{len(audio_chapters)} chapitres disponibles",
-          "emergency":"🚨 APPELER","welcome":"bienvenue dans votre voyage"},
+          "emergency":"🚨 APPELER","welcome":"bienvenue dans votre voyage",
+          "tonight":"Ce soir","crafted":"Créé par",
+          "flights":"Vols","outbound":"✈️ Aller","return_f":"🏠 Retour",
+          "your_team":"Votre équipe dédiée","this_app":"Cette App",
+          "app_desc":"Votre voyage complet — programme, hôtels, guide audio et contacts d'urgence."},
 }
 t = LABELS.get(lang, LABELS["en"])
 
@@ -1136,10 +1149,10 @@ strong{{font-weight:600;color:var(--text)}}
 {audio_tab_html}
   <!-- INFO TAB -->
   <section class="tab-panel" id="tab-info">
-    <div class="card"><h3>✈️ {trip_title}</h3><p>{trip_subtitle}</p>{"<p class='small' style='margin-top:4px;'><strong>" + client_name + "</strong></p>" if client_name else ""}<p class="small muted mb-0">Crafted by {dmc_name}</p></div>
+    <div class="card"><h3>✈️ {trip_title}</h3><p>{trip_subtitle}</p>{"<p class='small' style='margin-top:4px;'><strong>" + client_name + "</strong></p>" if client_name else ""}<p class="small muted mb-0">{t["crafted"]} {dmc_name}</p></div>
     <div id="flights-section"></div>
-    <div class="box gold" style="margin-top:0;"><div class="box-title">🌟 Your dedicated team</div>{dmc_name} is with you 24/7.{"<br><br><a href='tel:" + dmc_phone + "' class='btn btn-brand' style='margin-top:8px;'>📞 " + t["call"] + "</a>" if dmc_phone else ""}</div>
-    <div class="card"><h3>📱 This App</h3><p class="small">Your complete trip: day-by-day programme, all hotels{"," if audio_chapters else ""}{" audio guide," if audio_chapters else ""} and emergency contacts — works offline.</p></div>
+    <div class="box gold" style="margin-top:0;"><div class="box-title">🌟 {t["your_team"]}</div>{dmc_name} is with you 24/7.{"<br><br><a href='tel:" + dmc_phone + "' class='btn btn-brand' style='margin-top:8px;'>📞 " + t["call"] + "</a>" if dmc_phone else ""}</div>
+    <div class="card"><h3>📱 {t["this_app"]}</h3><p class="small">{t["app_desc"]}</p></div>
   </section>
 
   <!-- SOS TAB -->
@@ -1199,7 +1212,7 @@ function renderDays() {{
     const hb=hotel?`
       <div class="hotel-card" style="margin-top:14px;">
         <div class="hotel-card-header">
-          <div class="hotel-card-eyebrow">Tonight<span class="hotel-card-eyebrow-line"></span></div>
+          <div class="hotel-card-eyebrow">{t["tonight"]}<span class="hotel-card-eyebrow-line"></span></div>
           <div class="hotel-card-name">${{hotel.name}}</div>
           <div class="hotel-card-loc">${{hotel.loc}}</div>
           ${{hotel.rating?`<div class="hotel-card-rating">★ ${{hotel.rating}}</div>`:''}}
@@ -1305,9 +1318,9 @@ function renderSOS() {{
 
 function renderFlights() {{
   if(!FLIGHTS||!FLIGHTS.length) return;
-  const labels={{'outbound':'✈️ Outbound Flight','return':'🏠 Return Flight'}};
+  const labels={{'outbound':'{t["outbound"]} Flight','return':'{t["return_f"]} Flight'}};
   document.getElementById('flights-section').innerHTML=
-    `<div style="margin-bottom:10px"><div class="list-header" style="padding:0 0 8px">Flights</div>`+
+    `<div style="margin-bottom:10px"><div class="list-header" style="padding:0 0 8px">{t["flights"]}</div>`+
     FLIGHTS.map(f=>`
       <div class="flight-card">
         <div class="flight-card-type">${{labels[f.type]||'✈️ Flight'}}</div>
