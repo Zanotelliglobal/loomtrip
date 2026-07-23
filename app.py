@@ -851,4 +851,5 @@ if __name__ == "__main__":
     print("  🗺️  Loomtrip Admin Dashboard")
     print("  http://localhost:5099")
     print("─"*50 + "\n")
-    app.run(host="0.0.0.0", port=5099, debug=False, threaded=True)
+    port = int(os.environ.get("PORT", 5099))
+    app.run(host="0.0.0.0", port=port, debug=False, threaded=True)
