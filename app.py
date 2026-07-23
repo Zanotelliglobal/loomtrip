@@ -775,8 +775,8 @@ function applyFilters() {
   const lang = document.getElementById('filter-lang').value;
   const sort = document.getElementById('filter-sort').value;
   let list = allBuilds.filter(b => {
-    if (lang && b.lang \!== lang) return false;
-    if (\!q) return true;
+    if (lang && b.lang !== lang) return false;
+    if (!q) return true;
     return [b.name, b.destination, b.client, b.trip_name].some(f => (f||'').toLowerCase().includes(q));
   });
   list.sort((a,b) => {
@@ -789,13 +789,13 @@ function applyFilters() {
   });
   const el = document.getElementById('builds-list');
   const cnt = document.getElementById('builds-count');
-  if (\!allBuilds.length) {
+  if (!allBuilds.length) {
     cnt.textContent='';
     el.innerHTML='<div class="empty-state"><div class="empty-icon">\uD83D\uDDFA\uFE0F</div><div class="empty-title">No trips yet</div><div class="empty-sub">Upload an itinerary to generate your first trip.</div></div>';
     return;
   }
-  cnt.textContent = list.length+' of '+allBuilds.length+' trip'+(allBuilds.length\!==1?'s':'');
-  if (\!list.length) {
+  cnt.textContent = list.length+' of '+allBuilds.length+' trip'+(allBuilds.length!==1?'s':'');
+  if (!list.length) {
     el.innerHTML='<div class="empty-state"><div class="empty-icon">\uD83D\uDD0D</div><div class="empty-title">No results</div><div class="empty-sub">Try a different search or filter.</div></div>';
     return;
   }
