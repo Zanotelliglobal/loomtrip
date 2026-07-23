@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Tuscany, Italy">
+<meta name="theme-color" content="#8B4513">
+<title>Tuscany: Art, Wine & Renaissance Villages</title>
+<style>
+:root {
+  --brand: #8B4513;
+  --brand-text: #ffffff;
+  --bg: #f5f5f7;
+  --bg-elevated: #ffffff;
+  --bg-nav: rgba(255,255,255,0.88);
+  --text: #0a1929;
+  --text-secondary: #3c3c43;
+  --text-muted: #8e8e93;
+  --accent: #8B4513;
+  --danger: #ff3b30;
+  --warn: #ff9500;
+  --success: #34c759;
+  --gold: #d4a574;
+  --border: rgba(60,60,67,0.12);
+  --shadow-card: 0 1px 4px rgba(0,0,0,0.07);
+  --tab-h: 64px;
+  --header-h: 52px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #000000; --bg-elevated: #1c1c1e; --bg-nav: rgba(28,28,30,0.88);
+    --text: #ffffff; --text-secondary: #ebebf5; --text-muted: #98989f;
+    --border: rgba(84,84,88,0.32); --shadow-card: 0 1px 4px rgba(0,0,0,0.4);
+  }
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; margin:0; padding:0; }
+html, body { height:100%; overflow:hidden; overscroll-behavior:none; }
+body { font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,sans-serif; font-size:15px; line-height:1.4; color:var(--text); background:var(--bg); -webkit-font-smoothing:antialiased; }
+h2 { font-size:22px; font-weight:700; letter-spacing:-0.5px; margin:0 0 8px; }
+h3 { font-size:17px; font-weight:700; margin:0 0 6px; }
+h4 { font-size:15px; font-weight:600; margin:0 0 4px; }
+p { margin:0 0 8px; color:var(--text-secondary); }
+a { color:var(--accent); text-decoration:none; }
+strong { font-weight:600; color:var(--text); }
+
+/* APP SHELL */
+.app-header {
+  position:fixed; top:0; left:0; right:0; height:var(--header-h);
+  background:var(--brand); color:var(--brand-text);
+  display:flex; align-items:center; justify-content:space-between;
+  padding:0 16px; padding-top:env(safe-area-inset-top);
+  z-index:100;
+}
+.app-header-logo {
+  display:flex; align-items:center; gap:10px;
+}
+.app-header-logo img { height:28px; border-radius:6px; }
+.app-header-brand { font-size:15px; font-weight:700; letter-spacing:-0.3px; }
+.app-header-trip { font-size:12px; opacity:0.75; text-align:right; line-height:1.3; max-width:160px; }
+.app-header-trip strong { opacity:1; color:var(--brand-text); font-size:13px; }
+
+.tab-bar {
+  position:fixed; bottom:0; left:0; right:0;
+  height:var(--tab-h); padding-bottom:env(safe-area-inset-bottom);
+  background:var(--bg-nav); backdrop-filter:blur(20px);
+  -webkit-backdrop-filter:blur(20px);
+  border-top:1px solid var(--border);
+  display:grid; grid-template-columns:repeat(4,1fr);
+  z-index:100;
+}
+.tab-btn {
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:3px; border:none; background:none; cursor:pointer;
+  color:var(--text-muted); font-size:10px; font-weight:500; padding:8px 0;
+  transition:color 0.15s;
+}
+.tab-btn .tab-icon { font-size:22px; line-height:1; }
+.tab-btn.active { color:var(--brand); }
+.tab-btn.active .tab-icon { transform:scale(1.08); }
+
+.app-body {
+  position:fixed; top:var(--header-h); bottom:var(--tab-h);
+  left:0; right:0; overflow:hidden;
+}
+.tab-panel {
+  position:absolute; inset:0;
+  overflow-y:auto; -webkit-overflow-scrolling:touch;
+  padding:16px 16px 24px;
+  display:none;
+}
+.tab-panel.active { display:block; }
+.tab-panel.no-padding { padding:0; }
+
+/* CARDS */
+.card {
+  background:var(--bg-elevated); border-radius:14px;
+  padding:16px; margin-bottom:12px;
+  box-shadow:var(--shadow-card);
+}
+.section-header {
+  font-size:13px; font-weight:600; color:var(--text-muted);
+  text-transform:uppercase; letter-spacing:0.5px;
+  margin:20px 0 10px; padding:0 2px;
+}
+.section-header:first-child { margin-top:4px; }
+
+/* DAY CARDS */
+.day-card {
+  background:var(--bg-elevated); border-radius:14px; margin-bottom:10px;
+  box-shadow:var(--shadow-card); overflow:hidden;
+}
+.day-card.today { border:2px solid var(--brand); }
+.day-card-summary {
+  display:flex; align-items:center; gap:12px;
+  padding:14px 16px; cursor:pointer; background:none; border:none;
+  width:100%; text-align:left;
+}
+.day-num-badge {
+  width:38px; height:38px; border-radius:10px;
+  background:var(--brand); color:var(--brand-text);
+  display:flex; align-items:center; justify-content:center;
+  font-size:16px; font-weight:800; flex-shrink:0;
+}
+.day-info { flex:1; min-width:0; }
+.day-info-title { font-size:15px; font-weight:700; color:var(--text); }
+.day-info-meta { font-size:12px; color:var(--text-muted); margin-top:2px; }
+.day-chevron { font-size:20px; color:var(--text-muted); transition:transform 0.2s; }
+.day-card.open .day-chevron { transform:rotate(90deg); }
+.day-card-body { display:none; padding:0 16px 16px; border-top:1px solid var(--border); }
+.day-card.open .day-card-body { display:block; }
+.today-pill { background:var(--brand); color:var(--brand-text); font-size:11px; font-weight:600; padding:2px 7px; border-radius:20px; }
+
+/* TIMELINE */
+.timeline { list-style:none; padding:0; margin:10px 0; }
+.timeline li { display:flex; gap:10px; padding:6px 0; border-bottom:1px solid var(--border); font-size:14px; }
+.timeline li:last-child { border-bottom:none; }
+.timeline-time { color:var(--brand); font-weight:700; font-size:13px; min-width:42px; padding-top:1px; }
+
+/* BOXES */
+.box { border-radius:12px; padding:12px 14px; margin:10px 0; }
+.box-title { font-size:13px; font-weight:700; margin-bottom:4px; }
+.box.success { background:rgba(52,199,89,0.12); color:#1a6b35; }
+.box.warn    { background:rgba(255,149,0,0.12);  color:#8a4f00; }
+.box.gold    { background:rgba(212,165,116,0.15); color:#7a4e1a; }
+@media (prefers-color-scheme:dark) {
+  .box.success { background:rgba(48,209,88,0.15);  color:#30d158; }
+  .box.warn    { background:rgba(255,159,10,0.15); color:#ff9f0a; }
+  .box.gold    { background:rgba(230,183,129,0.15);color:#e6b781; }
+}
+
+/* HOTEL CARDS */
+.hotel-card { background:var(--bg-elevated); border-radius:14px; padding:14px; margin-bottom:10px; box-shadow:var(--shadow-card); }
+.hotel-card-top { display:flex; align-items:center; gap:10px; margin-bottom:8px; }
+.hotel-card-num { width:32px; height:32px; border-radius:8px; background:var(--brand); color:var(--brand-text); display:flex; align-items:center; justify-content:center; font-weight:800; font-size:14px; flex-shrink:0; }
+.hotel-card-name { font-size:15px; font-weight:700; }
+.hotel-card-dates { font-size:12px; color:var(--text-muted); margin-top:1px; }
+.hotel-card-rating { margin-left:auto; background:var(--brand); color:var(--brand-text); font-size:13px; font-weight:700; padding:4px 8px; border-radius:8px; }
+.hotel-card-meta { font-size:13px; color:var(--text-secondary); margin:6px 0 10px; }
+.hotel-card-actions { display:flex; gap:8px; flex-wrap:wrap; }
+
+/* BUTTONS */
+.btn { display:inline-flex; align-items:center; gap:5px; padding:8px 14px; border-radius:10px; font-size:13px; font-weight:600; border:none; cursor:pointer; text-decoration:none; background:var(--bg); color:var(--text); box-shadow:0 0 0 1px var(--border); }
+.btn-brand { background:var(--brand); color:var(--brand-text); box-shadow:none; }
+.btn-success { background:rgba(52,199,89,0.15); color:#1a6b35; }
+@media (prefers-color-scheme:dark) { .btn-success { color:#30d158; } }
+
+/* CALENDAR STRIP */
+.cal-strip { display:flex; gap:6px; overflow-x:auto; padding:12px 16px 8px; scrollbar-width:none; }
+.cal-strip::-webkit-scrollbar { display:none; }
+.cal-day { min-width:38px; height:52px; border-radius:10px; border:none; cursor:pointer; background:var(--bg-elevated); color:var(--text-muted); font-size:13px; font-weight:600; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; box-shadow:var(--shadow-card); }
+.cal-day.today { background:var(--brand); color:var(--brand-text); }
+.cal-day.past { opacity:0.45; }
+.cal-num { font-size:17px; font-weight:800; line-height:1; }
+
+/* SOS */
+.sos-btn-huge { width:100%; padding:22px; border-radius:16px; background:var(--danger); color:#fff; font-size:22px; font-weight:800; border:none; cursor:pointer; margin-bottom:16px; letter-spacing:-0.3px; }
+.list-group { background:var(--bg-elevated); border-radius:14px; overflow:hidden; margin-bottom:16px; box-shadow:var(--shadow-card); }
+.phone-row { display:flex; align-items:center; padding:14px 16px; border-bottom:1px solid var(--border); }
+.phone-row:last-child { border-bottom:none; }
+.phone-info { flex:1; }
+.phone-name { font-weight:600; font-size:14px; }
+.phone-desc { font-size:12px; color:var(--text-muted); margin-top:2px; }
+.call-btn { background:var(--success); color:#fff; width:40px; height:40px; border-radius:20px; display:flex; align-items:center; justify-content:center; font-size:18px; text-decoration:none; }
+.list-header { font-size:13px; font-weight:600; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px; padding:16px 2px 6px; }
+.list-header:first-child { padding-top:4px; }
+
+/* LOOMTRIP WATERMARK */
+.loomtrip-badge {
+  position:fixed; bottom:calc(var(--tab-h) + 8px); right:12px;
+  background:rgba(0,0,0,0.55); color:#fff; backdrop-filter:blur(8px);
+  -webkit-backdrop-filter:blur(8px);
+  font-size:10px; font-weight:600; padding:4px 9px; border-radius:20px;
+  letter-spacing:0.2px; z-index:99; pointer-events:none;
+  opacity:0.7;
+}
+
+/* SCROLLBAR */
+.tab-panel::-webkit-scrollbar { width:0; }
+
+/* MISC */
+.mp { color:var(--accent); }
+.small { font-size:13px; }
+.muted { color:var(--text-muted); }
+.center { text-align:center; }
+.mb-0 { margin-bottom:0; }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header class="app-header">
+  <div class="app-header-logo">
+    
+    <div class="app-header-brand">Villa Toscana Luxury Travel</div>
+  </div>
+  <div class="app-header-trip">
+    <strong>Tuscany, Italy</strong><br>7 Days · 6 Nights · May 2026
+  </div>
+</header>
+
+<!-- APP BODY -->
+<div class="app-body">
+
+  <!-- DAYS TAB -->
+  <section class="tab-panel active no-padding" id="tab-days">
+    <div class="cal-strip" id="calendar-strip"></div>
+    <div style="padding:0 12px 24px;" id="days-list"></div>
+  </section>
+
+  <!-- HOTELS TAB -->
+  <section class="tab-panel" id="tab-hotels">
+    <div id="hotels-list"></div>
+  </section>
+
+  <!-- SOS TAB -->
+  <section class="tab-panel" id="tab-sos">
+    <div id="sos-content"></div>
+  </section>
+
+  <!-- INFO TAB -->
+  <section class="tab-panel" id="tab-info">
+    <div class="card">
+      <h3>✈️ Tuscany: Art, Wine & Renaissance Villages</h3>
+      <p>7 Days · 6 Nights · May 2026</p>
+      <p class="small muted mb-0">Your personalised travel app — crafted by Villa Toscana Luxury Travel</p>
+    </div>
+    <div class="box gold" style="margin-top:0;">
+      <div class="box-title">🌟 Your dedicated travel team</div>
+      Villa Toscana Luxury Travel is available 24/7 throughout your journey.
+      <br><br><a href="tel:+39 055 9876543" class="btn btn-brand" style="margin-top:8px;">📞 📞 Call us</a>
+    </div>
+    <div class="card">
+      <h3>📱 This App</h3>
+      <p class="small">Your complete trip in one app: day-by-day programme, all hotels, and emergency contacts — works offline too.</p>
+      <p class="small muted mb-0">Add to home screen for the best experience.</p>
+    </div>
+    <div style="height:24px;"></div>
+  </section>
+
+</div>
+
+<!-- TAB BAR -->
+<nav class="tab-bar">
+  <button class="tab-btn active" onclick="switchTab('days')" id="btn-days">
+    <span class="tab-icon">📅</span><span>Days</span>
+  </button>
+  <button class="tab-btn" onclick="switchTab('hotels')" id="btn-hotels">
+    <span class="tab-icon">🏨</span><span>Hotels</span>
+  </button>
+  <button class="tab-btn" onclick="switchTab('info')" id="btn-info">
+    <span class="tab-icon">ℹ️</span><span>Info</span>
+  </button>
+  <button class="tab-btn" onclick="switchTab('sos')" id="btn-sos">
+    <span class="tab-icon">🚨</span><span>SOS</span>
+  </button>
+</nav>
+
+<!-- LOOMTRIP WATERMARK -->
+<div class="loomtrip-badge">✨ Powered by Loomtrip</div>
+
+<script>
+// ─── DATA ───────────────────────────────────────────────────────────────────
+const HOTELS = [
+  {
+    "n": 1,
+    "name": "Portrait Firenze",
+    "loc": "Florence",
+    "dates": "Mon 4 → Tue 5 May",
+    "rating": null,
+    "addr": "Lungarno Acciaiuoli 4, 50123 Firenze",
+    "phone": "+39 055 27268000",
+    "phone_display": "+39 055 27268000",
+    "web": "portraitfirenze.com",
+    "meta": "Boutique 5-star riverside hotel on the Arno with rooftop terrace offering stunning Florence views. ⚠️ Note: Florence ZTL vehicle permit required — driver handles arrangement.",
+    "map_query": "Portrait Firenze Lungarno Acciaiuoli Florence"
+  },
+  {
+    "n": 2,
+    "name": "Castello di Casole, Estate & Spa",
+    "loc": "Casole d'Elsa, Chianti",
+    "dates": "Wed 6 → Sat 9 May",
+    "rating": null,
+    "addr": "Casole d'Elsa, Tuscany",
+    "phone": "+39 0577 961501",
+    "phone_display": "+39 0577 961501",
+    "web": "castelladicasole.com",
+    "meta": "Exclusive 4,200-acre private estate with medieval castle origins, spa facilities, and on-site fine dining. Premium base for Chianti, Siena, and Val d'Orcia explorations.",
+    "map_query": "Castello di Casole Casole d'Elsa Tuscany"
+  }
+];
+const DAYS   = [
+  {
+    "n": 1,
+    "date": "Mon 4 May",
+    "title": "Florence Arrival & Historic Centre",
+    "route": "Florence Airport → Florence centre",
+    "stats": "~10 km · Easy arrival day",
+    "hotel_n": 1,
+    "timeline": [
+      [
+        "12:00",
+        "Arrival <strong>Florence Airport (FLR)</strong> — private transfer arranged"
+      ],
+      [
+        "14:00",
+        "Check-in <strong>Portrait Firenze</strong> — boutique 5-star on the Arno"
+      ],
+      [
+        "16:00",
+        "Private walking tour: Piazza della Signoria, Uffizi exterior, Ponte Vecchio, Santo Spirito"
+      ],
+      [
+        "19:30",
+        "<strong>Buca Mario</strong> (booked) — welcome dinner, Florence's oldest restaurant since 1886"
+      ]
+    ],
+    "boxes": [
+      {
+        "type": "warn",
+        "title": "🚗 ZTL Zone",
+        "text": "Florence city centre restricted to permit holders. Your driver has arranged the ZTL permit — no action needed."
+      },
+      {
+        "type": "success",
+        "title": "💡 Tip",
+        "text": "Rest this afternoon. Ponte Vecchio at sunset is magical — plan a 17:00 stroll before dinner."
+      }
+    ]
+  },
+  {
+    "n": 2,
+    "date": "Tue 5 May",
+    "title": "Florence Master Art Collections",
+    "route": "Florence (city only)",
+    "stats": "~8 km walking · Museum day",
+    "hotel_n": 1,
+    "timeline": [
+      [
+        "08:30",
+        "<strong>Uffizi Gallery</strong> (booked) — exclusive pre-opening with private guide, 2 hours"
+      ],
+      [
+        "08:30",
+        "Botticelli's Birth of Venus, Caravaggio, Titian masterpieces"
+      ],
+      [
+        "11:00",
+        "<strong>Accademia Gallery</strong> — Michelangelo's David"
+      ],
+      [
+        "13:00",
+        "<strong>Trattoria Sostanza</strong> (recommended) — famous butter pasta and bistecca"
+      ],
+      [
+        "15:30",
+        "<strong>San Lorenzo Market</strong> + Mercato Centrale — food hall exploration"
+      ],
+      [
+        "17:00",
+        "<strong>Piazzale Michelangelo</strong> — sunset views over Florence"
+      ],
+      [
+        "20:00",
+        "<strong>Buca dell'Orafo</strong> (recommended) — dinner in historic trattoria"
+      ]
+    ],
+    "boxes": [
+      {
+        "type": "gold",
+        "title": "✨ Private Uffizi",
+        "text": "Pre-opening access (08:30) means you avoid crowds. A genuine luxury touch — arrive fresh and hydrated."
+      },
+      {
+        "type": "success",
+        "title": "💡 Tip",
+        "text": "Comfortable walking shoes essential today. ~8 km total. Wear layers — museums are cool."
+      }
+    ]
+  },
+  {
+    "n": 3,
+    "date": "Wed 6 May",
+    "title": "Chianti Wine & Siena Arrival",
+    "route": "Florence → Chianti → Casole d'Elsa",
+    "stats": "~60 km · Wine tasting day",
+    "hotel_n": 2,
+    "timeline": [
+      [
+        "09:00",
+        "Depart Florence in private vehicle toward Chianti"
+      ],
+      [
+        "10:30",
+        "<strong>Castello di Ama</strong> (booked) — private wine tasting & barrel room tour, 2 hours"
+      ],
+      [
+        "10:30",
+        "Contemporary art installations on winery grounds"
+      ],
+      [
+        "13:30",
+        "<strong>Osteria di Passignano</strong> (booked) — Michelin-starred lunch in 11th-century wine cellar"
+      ],
+      [
+        "16:00",
+        "Scenic drive through <strong>Greve in Chianti</strong> village"
+      ],
+      [
+        "17:30",
+        "Arrive <strong>Castello di Casole</strong> — 4,200-acre private estate, check-in from 16:00"
+      ]
+    ],
+    "boxes": [
+      {
+        "type": "gold",
+        "title": "🍷 Wine Expertise",
+        "text": "Castello di Ama is known for contemporary art installations and innovative winemaking. Guide will discuss Chianti terroir in detail."
+      },
+      {
+        "type": "success",
+        "title": "💡 Tip",
+        "text": "Michelin lunch is special — pace yourself. Lighter dinner on estate recommended after wine tasting."
+      }
+    ]
+  },
+  {
+    "n": 4,
+    "date": "Thu 7 May",
+    "title": "Siena, Montalcino & Val d'Orcia",
+    "route": "Casole d'Elsa → Siena → Montalcino → Val d'Orcia",
+    "stats": "~80 km · Scenic wine loop",
+    "hotel_n": 2,
+    "timeline": [
+      [
+        "09:00",
+        "Depart <strong>Castello di Casole</strong> with private driver"
+      ],
+      [
+        "10:00",
+        "<strong>Siena</strong> — Piazza del Campo (shell-shaped medieval square), Duomo, Battistero"
+      ],
+      [
+        "13:00",
+        "<strong>Osteria Il Carroccio</strong> (recommended) — Siena lunch"
+      ],
+      [
+        "15:00",
+        "Drive to <strong>Montalcino</strong> — Brunello wine region"
+      ],
+      [
+        "16:00",
+        "<strong>Biondi-Santi</strong> (booked) — private cellar tour & vertical Brunello tasting"
+      ],
+      [
+        "18:30",
+        "<strong>Pienza</strong> — UNESCO village, pecorino cheese, Val d'Orcia panoramas"
+      ],
+      [
+        "20:00",
+        "Return to Castello di Casole"
+      ]
+    ],
+    "boxes": [
+      {
+        "type": "gold",
+        "title": "🍇 Brunello Legacy",
+        "text": "Biondi-Santi invented Brunello di Montalcino in 1865. Tasting their vertical collection is a wine history masterclass."
+      },
+      {
+        "type": "success",
+        "title": "💡 Tip",
+        "text": "Pienza at sunset is postcard-perfect. Take 20 mins to walk Piazza Pio II for photography."
+      }
+    ]
+  },
+  {
+    "n": 5,
+    "date": "Fri 8 May",
+    "title": "Thermal Baths, Volterra & Relaxation",
+    "route": "Casole d'Elsa → Terme di Petriolo → Volterra → Casole d'Elsa",
+    "stats": "~70 km · Wellness day",
+    "hotel_n": 2,
+    "timeline": [
+      [
+        "09:30",
+        "<strong>Terme di Petriolo</strong> — natural sulphur hot springs (40°C), free outdoor riverside pools"
+      ],
+      [
+        "12:30",
+        "Picnic lunch — packed gourmet hamper from Castello di Casole kitchen"
+      ],
+      [
+        "15:00",
+        "<strong>Volterra</strong> — perfectly preserved Etruscan city, alabaster workshops, Roman theatre ruins"
+      ],
+      [
+        "17:30",
+        "Return to Castello di Casole"
+      ],
+      [
+        "20:00",
+        "Private estate terrace dinner — chef's tasting menu"
+      ]
+    ],
+    "boxes": [
+      {
+        "type": "gold",
+        "title": "♨️ Natural Spa",
+        "text": "Terme di Petriolo's outdoor thermal pools are unique to Tuscany. Bring swimwear; water is naturally heated year-round."
+      },
+      {
+        "type": "success",
+        "title": "💡 Tip",
+        "text": "Volterra is perched 550m high with dramatic views. Bring water and sun protection — exposed Piazza dei Priori."
+      }
+    ]
+  },
+  {
+    "n": 6,
+    "date": "Sat 9 May",
+    "title": "Cinque Terre & Lucca Day Excursion",
+    "route": "Casole d'Elsa → Lucca → Cinque Terre → Casole d'Elsa",
+    "stats": "~140 km · Long adventure day",
+    "hotel_n": 2,
+    "timeline": [
+      [
+        "08:00",
+        "Early departure — long day ahead"
+      ],
+      [
+        "10:30",
+        "<strong>Lucca</strong> — Renaissance walls (walk or cycle the top), Piazza Anfiteatro, Torre Guinigi oak trees"
+      ],
+      [
+        "13:30",
+        "Drive to <strong>La Spezia</strong> ferry port"
+      ],
+      [
+        "14:30",
+        "Ferry to <strong>Vernazzo</strong> (Cinque Terre) — 40 minutes"
+      ],
+      [
+        "15:15",
+        "Vernazzo village — coloured houses, castle, swimming from rocks"
+      ],
+      [
+        "17:00",
+        "Ferry to <strong>Monterosso al Mare</strong> — longest beach in Cinque Terre"
+      ],
+      [
+        "19:00",
+        "Return ferry + scenic drive back to Castello di Casole"
+      ]
+    ],
+    "boxes": [
+      {
+        "type": "warn",
+        "title": "🎫 Cinque Terre Pass",
+        "text": "Day pass required (€7.50 per person). Guide will purchase on arrival. Covers trains, ferries, and park access."
+      },
+      {
+        "type": "success",
+        "title": "💡 Tip",
+        "text": "Wear swimwear under clothes. Vernazzo's rock swimming is refreshing. Monterosso beach has restaurants for sunset aperitivo."
+      }
+    ]
+  },
+  {
+    "n": 7,
+    "date": "Sun 10 May",
+    "title": "Return Day & Departure",
+    "route": "Casole d'Elsa → Florence Airport",
+    "stats": "~80 km · Relaxed return",
+    "hotel_n": null,
+    "timeline": [
+      [
+        "09:00",
+        "Final breakfast on estate terrace"
+      ],
+      [
+        "10:30",
+        "Checkout <strong>Castello di Casole</strong>"
+      ],
+      [
+        "11:30",
+        "Scenic drive: cypress-lined Val d'Orcia roads — Monticchiello, Bagno Vignoni photo stop"
+      ],
+      [
+        "13:30",
+        "<strong>Trattoria Lapo</strong> (recommended) — Tavarnelle Val di Pesa lunch"
+      ],
+      [
+        "15:30",
+        "Arrive <strong>Florence Airport</strong> for evening departure"
+      ]
+    ],
+    "boxes": [
+      {
+        "type": "success",
+        "title": "📸 Photo Stop",
+        "text": "Bagno Vignoni's Renaissance hot-spring piazza is iconic. 10 mins for memorable final Tuscany photos."
+      },
+      {
+        "type": "gold",
+        "title": "✨ Farewell",
+        "text": "This scenic route through Val d'Orcia is the perfect journey's end — rolling hills, cypress avenues, and timeless Tuscany."
+      }
+    ]
+  }
+];
+const BRAND  = {"name": "Villa Toscana Luxury Travel", "color": "#8B4513", "emergency": "112", "dmc_phone": "+39 055 9876543"};
+const T      = {"days": "Days", "hotels": "Hotels", "info": "Info", "sos": "SOS", "today": "Today", "itinerary": "Itinerary", "map": "📍 Map", "call": "📞 Call", "website": "🌐 Website", "emergency": "🚨 CALL", "powered": "Powered by Loomtrip"};
+const M = q => 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(q);
+
+// ─── TAB SWITCHING ──────────────────────────────────────────────────────────
+function switchTab(id) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + id).classList.add('active');
+  document.getElementById('btn-' + id).classList.add('active');
+}
+
+// ─── OPEN DAY ───────────────────────────────────────────────────────────────
+function openDay(n) {
+  const card = document.querySelector('[data-n="' + n + '"]');
+  if (!card) return;
+  card.classList.add('open');
+  setTimeout(() => card.scrollIntoView({behavior:'smooth', block:'nearest'}), 50);
+}
+
+// ─── RENDER DAYS ────────────────────────────────────────────────────────────
+function renderDays() {
+  const today = new Date();
+  const firstDay = DAYS[0];
+  // Try to parse trip start from first day date string
+  let dayIdx = 1; // default to showing day 1 for demo
+
+  // Calendar strip
+  let stripHtml = '';
+  DAYS.forEach((d, i) => {
+    const num = (d.date || '').match(/\d+/)?.[0] || (i+1);
+    stripHtml += `<button class="cal-day" onclick="openDay(${d.n})"><span class="cal-num">${num}</span></button>`;
+  });
+  document.getElementById('calendar-strip').innerHTML = stripHtml;
+
+  // Days list
+  let html = '';
+  DAYS.forEach(day => {
+    const hotel = day.hotel_n ? HOTELS.find(h => h.n === day.hotel_n) : null;
+    const hotelBlock = hotel ? `
+      <div class="hotel-card" style="margin-top:12px;">
+        <div class="hotel-card-top">
+          <div class="hotel-card-num">${hotel.n}</div>
+          <div class="hotel-card-title">
+            <div class="hotel-card-name">${hotel.name}</div>
+            <div class="hotel-card-dates">${hotel.loc}</div>
+          </div>
+          ${hotel.rating ? `<div class="hotel-card-rating">${hotel.rating}</div>` : ''}
+        </div>
+        <div class="hotel-card-meta">${hotel.meta}</div>
+        <div class="hotel-card-actions">
+          <a class="btn" href="${M(hotel.map_query)}" target="_blank">${T.map}</a>
+          ${hotel.phone ? `<a class="btn btn-success" href="tel:${hotel.phone}">${T.call}</a>` : ''}
+          ${hotel.web ? `<a class="btn" href="https://${hotel.web}" target="_blank">${T.website}</a>` : ''}
+        </div>
+      </div>` : '';
+
+    const timeline = (day.timeline || []).map(([t, c]) =>
+      `<li><span class="timeline-time">${t}</span><span>${c}</span></li>`
+    ).join('');
+
+    const boxes = (day.boxes || []).map(b =>
+      `<div class="box ${b.type}"><div class="box-title">${b.title}</div>${b.text}</div>`
+    ).join('');
+
+    html += `<div class="day-card" data-n="${day.n}">
+      <button class="day-card-summary" onclick="const c=this.parentElement;c.classList.toggle('open');">
+        <div class="day-num-badge">${String(day.n).padStart(2,'0')}</div>
+        <div class="day-info">
+          <div class="day-info-title">${day.title}</div>
+          <div class="day-info-meta">${day.date} · ${day.stats}</div>
+        </div>
+        <span class="day-chevron">›</span>
+      </button>
+      <div class="day-card-body">
+        ${hotelBlock}
+        <h3 style="margin:14px 0 6px;">${T.itinerary}</h3>
+        <ul class="timeline">${timeline}</ul>
+        ${boxes}
+      </div>
+    </div>`;
+  });
+  document.getElementById('days-list').innerHTML = html;
+  // Auto-open day 1 for the demo
+  setTimeout(() => openDay(1), 100);
+}
+
+// ─── RENDER HOTELS ──────────────────────────────────────────────────────────
+function renderHotels() {
+  const html = HOTELS.map(h => `
+    <div class="hotel-card">
+      <div class="hotel-card-top">
+        <div class="hotel-card-num">${h.n}</div>
+        <div class="hotel-card-title">
+          <div class="hotel-card-name">${h.name}</div>
+          <div class="hotel-card-dates">${h.dates} · ${h.loc}</div>
+        </div>
+        ${h.rating ? `<div class="hotel-card-rating">${h.rating}</div>` : ''}
+      </div>
+      <div class="hotel-card-meta">${h.meta}</div>
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">📍 ${h.addr}</div>
+      <div class="hotel-card-actions">
+        <a class="btn" href="${M(h.map_query)}" target="_blank">${T.map}</a>
+        ${h.phone ? `<a class="btn btn-success" href="tel:${h.phone}">${T.call}</a>` : ''}
+        ${h.web ? `<a class="btn" href="https://${h.web}" target="_blank">${T.website}</a>` : ''}
+      </div>
+    </div>`).join('');
+  document.getElementById('hotels-list').innerHTML = html;
+}
+
+// ─── RENDER SOS ─────────────────────────────────────────────────────────────
+function renderSOS() {
+  let html = `
+    <button class="sos-btn-huge" onclick="if(confirm('Call ${BRAND.emergency}?')) window.location.href='tel:${BRAND.emergency}';">
+      ${T.emergency} ${BRAND.emergency}
+    </button>`;
+
+  if (BRAND.dmc_phone) {
+    html += `<div class="list-header">Villa Toscana Luxury Travel</div>
+      <div class="list-group"><div class="phone-row">
+        <div class="phone-info"><div class="phone-name">Villa Toscana Luxury Travel — 24h</div></div>
+        <a class="call-btn" href="tel:${BRAND.dmc_phone}">📞</a>
+      </div></div>`;
+  }
+
+  const hotelsWithPhone = HOTELS.filter(h => h.phone);
+  if (hotelsWithPhone.length) {
+    html += `<div class="list-header">Hotels</div><div class="list-group">`;
+    hotelsWithPhone.forEach(h => {
+      html += `<div class="phone-row">
+        <div class="phone-info">
+          <div class="phone-name">${h.name}</div>
+          <div class="phone-desc">Night ${h.n} · ${h.loc}</div>
+        </div>
+        <a class="call-btn" href="tel:${h.phone}">📞</a>
+      </div>`;
+    });
+    html += `</div>`;
+  }
+
+  html += `<div class="box warn" style="margin-top:16px;">
+    <div class="box-title">⚠️ Emergency tip</div>
+    ${BRAND.emergency} works even without credit on your SIM. English-speaking operators available 24/7.
+  </div>`;
+
+  document.getElementById('sos-content').innerHTML = html;
+}
+
+// ─── INIT ────────────────────────────────────────────────────────────────────
+renderDays();
+renderHotels();
+renderSOS();
+</script>
+</body>
+</html>

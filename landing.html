@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Loomtrip — Your Journey Awaits</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Helvetica Neue',sans-serif;-webkit-font-smoothing:antialiased}
+
+.bg{
+  position:fixed;inset:0;z-index:0;
+  background-size:cover;background-position:center;
+  transition:none;
+}
+.bg-overlay{
+  position:absolute;inset:0;
+  background:linear-gradient(160deg,rgba(0,0,0,0.58) 0%,rgba(0,0,0,0.30) 50%,rgba(0,0,0,0.62) 100%);
+}
+
+.stage{
+  position:relative;z-index:1;
+  height:100vh;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  padding:24px;
+}
+
+.wordmark{
+  font-size:12px;font-weight:600;letter-spacing:3.5px;text-transform:uppercase;
+  color:rgba(255,255,255,0.6);margin-bottom:52px;
+  display:flex;align-items:center;gap:14px;
+}
+.wordmark::before,.wordmark::after{
+  content:'';height:1px;width:28px;
+  background:rgba(255,255,255,0.28);
+}
+
+.card{
+  width:100%;max-width:390px;
+  background:rgba(12,10,9,0.45);
+  backdrop-filter:blur(40px) saturate(160%);
+  -webkit-backdrop-filter:blur(40px) saturate(160%);
+  border:1px solid rgba(255,255,255,0.13);
+  border-radius:28px;
+  padding:44px 40px 38px;
+  box-shadow:
+    0 40px 100px rgba(0,0,0,0.5),
+    0 0 0 1px rgba(255,255,255,0.05) inset,
+    0 1px 0 rgba(255,255,255,0.1) inset;
+}
+
+.card-eyebrow{
+  font-size:11px;letter-spacing:2px;text-transform:uppercase;
+  color:rgba(255,255,255,0.4);margin-bottom:10px;
+}
+.card-title{
+  font-size:28px;font-weight:700;letter-spacing:-0.6px;
+  color:#fff;line-height:1.18;margin-bottom:8px;
+}
+.card-sub{
+  font-size:14px;color:rgba(255,255,255,0.45);
+  margin-bottom:36px;line-height:1.55;
+}
+
+.code-input{
+  width:100%;padding:20px;
+  font-size:24px;font-weight:700;letter-spacing:8px;text-align:center;
+  text-transform:uppercase;
+  background:rgba(255,255,255,0.08);
+  border:1.5px solid rgba(255,255,255,0.18);
+  border-radius:16px;
+  color:#fff;outline:none;
+  transition:border-color 0.2s,background 0.2s,box-shadow 0.2s;
+  font-family:inherit;
+  caret-color:rgba(255,255,255,0.7);
+  margin-bottom:12px;
+}
+.code-input::placeholder{
+  color:rgba(255,255,255,0.18);
+  letter-spacing:5px;font-size:18px;font-weight:400;
+}
+.code-input:focus{
+  border-color:rgba(255,255,255,0.45);
+  background:rgba(255,255,255,0.13);
+  box-shadow:0 0 0 4px rgba(255,255,255,0.06);
+}
+.code-input.shake{animation:shake 0.38s ease}
+@keyframes shake{
+  0%,100%{transform:translateX(0)}
+  20%{transform:translateX(-9px)}
+  45%{transform:translateX(9px)}
+  65%{transform:translateX(-5px)}
+  82%{transform:translateX(5px)}
+}
+
+.btn{
+  width:100%;padding:18px;
+  font-size:15px;font-weight:600;letter-spacing:0.2px;
+  background:rgba(255,255,255,0.96);
+  color:#111;border:none;border-radius:16px;
+  cursor:pointer;
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  transition:background 0.15s,transform 0.15s,box-shadow 0.15s;
+}
+.btn:hover{background:#fff;transform:translateY(-1px);box-shadow:0 10px 28px rgba(0,0,0,0.3)}
+.btn:active{transform:translateY(0);box-shadow:none}
+.btn:disabled{opacity:0.55;transform:none;cursor:default}
+.btn-arrow{font-size:17px;transition:transform 0.18s}
+.btn:hover .btn-arrow{transform:translateX(3px)}
+
+.err{
+  font-size:13px;color:rgba(255,130,120,0.9);
+  text-align:center;margin-top:14px;min-height:18px;
+}
+
+.dest-tag{
+  position:fixed;bottom:28px;left:50%;transform:translateX(-50%);
+  font-size:10.5px;letter-spacing:2.2px;text-transform:uppercase;
+  color:rgba(255,255,255,0.38);
+  background:rgba(0,0,0,0.22);
+  backdrop-filter:blur(12px);
+  padding:6px 18px;border-radius:20px;
+  white-space:nowrap;pointer-events:none;
+}
+
+@keyframes spin{to{transform:rotate(360deg)}}
+.spinner{
+  width:17px;height:17px;flex-shrink:0;
+  border:2px solid rgba(0,0,0,0.15);
+  border-top-color:#222;
+  border-radius:50%;
+  animation:spin 0.65s linear infinite;
+}
+</style>
+</head>
+<body>
+
+<div class="bg" id="bg"><div class="bg-overlay"></div></div>
+
+<div class="stage">
+  <div class="wordmark">Loomtrip</div>
+  <div class="card">
+    <div class="card-eyebrow">Private Access</div>
+    <div class="card-title">Your journey<br>awaits.</div>
+    <div class="card-sub">Enter the code sent by your travel specialist.</div>
+
+    <input class="code-input" id="inp"
+      type="text" maxlength="6"
+      placeholder="······"
+      autocomplete="off" autocorrect="off"
+      autocapitalize="characters" spellcheck="false" autofocus>
+
+    <button class="btn" id="btn" onclick="enter()">
+      <span id="btnLabel">Open my trip</span>
+      <span class="btn-arrow" id="btnArrow">→</span>
+    </button>
+    <div class="err" id="err"></div>
+  </div>
+</div>
+
+<div class="dest-tag" id="tag"></div>
+
+<script>
+// ── CODES (update after each new build) ───────────────────────────────────
+const CODES = {
+  "GEORAA": "aada328c",
+  "GEORB2": "b2032f81",
+  "TUSC50": "506fda84"
+};
+const SERVER = "http://localhost:5099"; // update if port changes
+
+// ── BACKGROUNDS ───────────────────────────────────────────────────────────
+const SCENES = [
+  {url:'https://images.unsplash.com/photo-1565008887967-af5ab3adcbe9?w=1920&q=85&fit=crop',label:'Tbilisi, Georgia'},
+  {url:'https://images.unsplash.com/photo-1533105079780-92b9be482077?w=1920&q=85&fit=crop',label:'Santorini, Greece'},
+  {url:'https://images.unsplash.com/photo-1467269204594-9661b134dd2b?w=1920&q=85&fit=crop',label:'Tuscany, Italy'},
+  {url:'https://images.unsplash.com/photo-1476610182048-b716b8518aae?w=1920&q=85&fit=crop',label:'Iceland'},
+  {url:'https://images.unsplash.com/photo-1512100356356-de1b84283e18?w=1920&q=85&fit=crop',label:'Cinque Terre, Italy'},
+  {url:'https://images.unsplash.com/photo-1542293787938-c9e299b880cc?w=1920&q=85&fit=crop',label:'Cappadocia, Turkey'},
+  {url:'https://images.unsplash.com/photo-1528360983277-13d401cdc186?w=1920&q=85&fit=crop',label:'Amalfi Coast, Italy'},
+  {url:'https://images.unsplash.com/photo-1553913861-c0fddf2619ee?w=1920&q=85&fit=crop',label:'Machu Picchu, Peru'},
+  {url:'https://images.unsplash.com/photo-1520250497591-112f2f40a3f4?w=1920&q=85&fit=crop',label:'Bali, Indonesia'},
+  {url:'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=1920&q=85&fit=crop',label:'Swiss Alps'},
+];
+
+// Pick random, static for this session
+const scene = SCENES[Math.floor(Math.random() * SCENES.length)];
+document.getElementById('bg').style.backgroundImage = `url(${scene.url})`;
+document.getElementById('tag').textContent = scene.label;
+
+// ── INPUT ─────────────────────────────────────────────────────────────────
+const inp = document.getElementById('inp');
+inp.addEventListener('input', () => {
+  inp.value = inp.value.toUpperCase().replace(/[^A-Z0-9]/g,'');
+  document.getElementById('err').textContent = '';
+});
+inp.addEventListener('keydown', e => { if(e.key==='Enter') enter(); });
+
+// ── ENTER ─────────────────────────────────────────────────────────────────
+function enter() {
+  const code = inp.value.trim();
+  if (code.length < 4) { shake(); return; }
+
+  const buildId = CODES[code];
+  if (!buildId) {
+    document.getElementById('err').textContent = 'Code not recognised. Check with your travel specialist.';
+    shake(); return;
+  }
+
+  // Show loading
+  const btn = document.getElementById('btn');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner"></div><span>Opening your trip…</span>';
+
+  // Navigate
+  setTimeout(() => {
+    window.location.href = `${SERVER}/preview/${buildId}`;
+  }, 600);
+}
+
+function shake() {
+  inp.classList.remove('shake');
+  void inp.offsetWidth; // reflow to restart animation
+  inp.classList.add('shake');
+  setTimeout(() => inp.classList.remove('shake'), 400);
+}
+</script>
+</body>
+</html>
