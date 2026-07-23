@@ -43,13 +43,16 @@ except ImportError:
 # ─── CLI ─────────────────────────────────────────────────────────────────────
 parser = argparse.ArgumentParser(description="Loomtrip demo generator")
 parser.add_argument("--itinerary", required=True)
-parser.add_argument("--color",  default=None,            help="Brand hex e.g. #8B4513")
-parser.add_argument("--logo",   default=None,            help="Logo URL")
-parser.add_argument("--lang",   default=None,            help="Override language: en | it | fr")
-parser.add_argument("--voice",  default=None,            help="edge-tts voice name")
-parser.add_argument("--rate",   default="-8%",           help="Speech rate e.g. -8%")
-parser.add_argument("--model",  default="claude-haiku-4-5")
-parser.add_argument("--no-audio", action="store_true",   help="Skip audio generation")
+parser.add_argument("--color",       default=None, help="Brand hex e.g. #8B4513")
+parser.add_argument("--logo",        default=None, help="Logo URL")
+parser.add_argument("--lang",        default=None, help="Override language: en | it | fr")
+parser.add_argument("--voice",       default=None, help="edge-tts voice name")
+parser.add_argument("--rate",        default="-8%", help="Speech rate e.g. -8pct")
+parser.add_argument("--model",       default="claude-haiku-4-5")
+parser.add_argument("--no-audio",    action="store_true", help="Skip audio generation")
+parser.add_argument("--trip-name",   default=None, help="Override trip title")
+parser.add_argument("--client-name", default=None, help="Client/traveler name for personalisation")
+parser.add_argument("--agency-name", default=None, help="Override DMC/agency name")
 args = parser.parse_args()
 
 # ─── read itinerary ──────────────────────────────────────────────────────────
@@ -113,7 +116,7 @@ Return ONLY a valid JSON object — no markdown fences, no explanation.
       "phone_display": "+39 055 ... or null",
       "web": "domain.com or null",
       "meta": "1-2 sentence highlights. ⚠️ prefix warnings.",
-      "map_query": "Google Maps search string"
+      "map_query": "Full hotel name + street address + city, e.g. 'Hotel Museum Via Museumstrasse 1 Tbilisi'"
     }
   ],
   "days": [
@@ -155,10 +158,11 @@ if args.color: data["brand_color"] = args.color
 if args.lang:  data["language"]    = args.lang
 
 brand_color  = data.get("brand_color") or "#1e3a5f"
-dmc_name     = data.get("dmc_name")     or "Your Travel Company"
+dmc_name     = args.agency_name or data.get("dmc_name") or "Your Travel Company"
 destination  = data.get("destination")  or "Your Destination"
-trip_title   = data.get("trip_title")   or destination
+trip_title   = args.trip_name or data.get("trip_title") or destination
 trip_subtitle= data.get("trip_subtitle") or ""
+client_name  = args.client_name or ""
 lang         = data.get("language")         or "en"
 emerg_num    = data.get("emergency_number") or "112"
 dmc_phone    = data.get("dmc_emergency_phone") or ""
@@ -190,6 +194,8 @@ Tone: intimate, evocative, practical. Like a trusted friend who knows the destin
 Do NOT read out times or logistics — focus on atmosphere, what makes this place special, and 1-2 insider tips.
 Start each narration naturally, as if speaking directly to the traveller. No titles, no "Day 1:" labels.
 
+IMPORTANT: Write ALL narration text in {lang_name}. The "title" field can also be in {lang_name}.
+
 Return ONLY a JSON array — no markdown, no explanation:
 [
   {{"day": 1, "title": "Day title for the player UI", "script": "Full narration text..."}},
@@ -206,10 +212,13 @@ if not args.no_audio:
     trip_summary = json.dumps([{"n":d["n"],"date":d["date"],"title":d["title"],
                                 "route":d.get("route",""),"timeline":d.get("timeline",[])} for d in days],
                               ensure_ascii=False)
+    lang_names = {"en": "English", "it": "Italian / Italiano", "fr": "French / Français"}
+    lang_name  = lang_names.get(lang, "English")
     narr_msg = ai.messages.create(
         model=args.model, max_tokens=8192,
         messages=[{"role":"user","content":
-            NARRATION_PROMPT.format(n_days=len(days), destination=destination, trip_json=trip_summary)}]
+            NARRATION_PROMPT.format(n_days=len(days), destination=destination,
+                                   trip_json=trip_summary, lang_name=lang_name)}]
     )
     raw_narr = re.sub(r'^```(?:json)?\s*','', narr_msg.content[0].text.strip())
     raw_narr = re.sub(r'\s*```$','', raw_narr)
@@ -220,8 +229,6 @@ if not args.no_audio:
         print(f"⚠️  Narration JSON error ({e}) — skipping audio"); audio_chapters = []
 
 # ─── STEP 3 — Generate MP3 files with edge-tts ───────────────────────────────
-import edge_tts
-
 output_slug = slugify(dmc_name)
 output_dir  = Path(f"demo-{output_slug}")
 output_dir.mkdir(exist_ok=True)
@@ -229,30 +236,44 @@ output_dir.mkdir(exist_ok=True)
 mp3_files = []
 if audio_chapters and not args.no_audio:
     print(f"🎙️  Generating audio ({voice}, rate={args.rate})...")
-    # Save scripts as .txt so they're never lost regardless of TTS outcome
+    # Save scripts so they're never lost regardless of TTS outcome
     scripts_path = output_dir / "narration-scripts.json"
     scripts_path.write_text(json.dumps(audio_chapters, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"   💾 Scripts saved → {scripts_path.name}")
 
-    async def gen_audio():
-        for ch in audio_chapters:
-            n   = ch["day"]
-            mp3 = output_dir / f"audio-{n:02d}.mp3"
-            if mp3.exists():
-                print(f"   ↩️  audio-{n:02d}.mp3 already exists, skipping")
-                mp3_files.append(mp3.name); continue
-            try:
-                tts = edge_tts.Communicate(ch["script"], voice, rate=args.rate)
-                await tts.save(str(mp3))
+    import subprocess, tempfile
+    for ch in audio_chapters:
+        n   = ch["day"]
+        mp3 = output_dir / f"audio-{n:02d}.mp3"
+        if mp3.exists() and mp3.stat().st_size > 0:
+            print(f"   ↩️  audio-{n:02d}.mp3 already exists, skipping")
+            mp3_files.append(mp3.name); continue
+        script_text = ch.get("script", "")
+        if not script_text.strip():
+            print(f"   ⚠️  audio-{n:02d}.mp3 skipped — empty script")
+            continue
+        print(f"   🔊 Generating audio-{n:02d}.mp3 ({len(script_text)} chars)...")
+        try:
+            # Run edge-tts as a subprocess — avoids asyncio/threading conflicts entirely
+            result = subprocess.run(
+                [sys.executable, "-m", "edge_tts",
+                 "--voice", voice, "--rate", args.rate,
+                 "--text", script_text,
+                 "--write-media", str(mp3)],
+                capture_output=True, text=True, timeout=120,
+                cwd=str(BASE_DIR if 'BASE_DIR' in dir() else Path(__file__).parent)
+            )
+            if mp3.exists() and mp3.stat().st_size > 0:
                 size_kb = mp3.stat().st_size // 1024
                 print(f"   ✓ audio-{n:02d}.mp3 ({size_kb} KB)")
                 mp3_files.append(mp3.name)
-            except Exception as e:
-                print(f"   ⚠️  audio-{n:02d}.mp3 skipped ({type(e).__name__}: {str(e)[:60]})")
-    try:
-        asyncio.run(gen_audio())
-    except Exception as e:
-        print(f"   ⚠️  TTS failed ({e}) — HTML will still be generated without audio files.")
+            else:
+                stderr_snippet = (result.stderr or "")[:300]
+                print(f"   ⚠️  audio-{n:02d}.mp3 empty/missing. stderr: {stderr_snippet}")
+        except subprocess.TimeoutExpired:
+            print(f"   ⚠️  audio-{n:02d}.mp3 TIMEOUT after 120s")
+        except Exception as e:
+            print(f"   ⚠️  audio-{n:02d}.mp3 FAILED: {type(e).__name__}: {e}")
 
 # ─── i18n labels ─────────────────────────────────────────────────────────────
 LABELS = {
@@ -260,17 +281,17 @@ LABELS = {
           "itinerary":"Itinerary","map":"📍 Map","call":"📞 Call","web":"🌐 Website",
           "powered":"Powered by Loomtrip","select_ch":"Select a chapter",
           "ch_avail":f"{len(audio_chapters)} chapters available",
-          "emergency":"🚨 CALL"},
+          "emergency":"🚨 CALL","welcome":"welcome to your trip"},
     "it":{"days":"Giorni","hotels":"Hotel","audio":"Audio","info":"Info","sos":"SOS",
           "itinerary":"Programma","map":"📍 Mappa","call":"📞 Chiama","web":"🌐 Sito",
           "powered":"Powered by Loomtrip","select_ch":"Seleziona un capitolo",
           "ch_avail":f"{len(audio_chapters)} capitoli disponibili",
-          "emergency":"🚨 CHIAMA"},
+          "emergency":"🚨 CHIAMA","welcome":"benvenuti nel vostro viaggio"},
     "fr":{"days":"Jours","hotels":"Hôtels","audio":"Audio","info":"Infos","sos":"SOS",
           "itinerary":"Programme","map":"📍 Carte","call":"📞 Appeler","web":"🌐 Site",
           "powered":"Powered by Loomtrip","select_ch":"Choisissez un chapitre",
           "ch_avail":f"{len(audio_chapters)} chapitres disponibles",
-          "emergency":"🚨 APPELER"},
+          "emergency":"🚨 APPELER","welcome":"bienvenue dans votre voyage"},
 }
 t = LABELS.get(lang, LABELS["en"])
 
@@ -419,6 +440,8 @@ HTML = f"""<!DOCTYPE html>
 <meta name="apple-mobile-web-app-title" content="{destination}">
 <meta name="theme-color" content="{brand_color}">
 <title>{trip_title}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
 /* ── LUXURY EDITORIAL DESIGN SYSTEM ────────────────────────────────────────
    Style: Warm editorial — Georgia serif titles, liquid-glass nav, ink on cream.
@@ -437,8 +460,8 @@ HTML = f"""<!DOCTYPE html>
   --text:#1C1917;
   --text-secondary:#57534E;
   --text-muted:#A8A29E;
-  --text-serif:Georgia,"Times New Roman",serif;
-  --text-sans:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",Helvetica,Arial,sans-serif;
+  --text-serif:'Cormorant Garamond',Georgia,"Times New Roman",serif;
+  --text-sans:'Inter',-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",Helvetica,Arial,sans-serif;
   /* semantic */
   --accent:{brand_color};
   --danger:#C0392B;
@@ -454,8 +477,8 @@ HTML = f"""<!DOCTYPE html>
   --shadow-md:0 4px 20px rgba(28,25,23,0.08),0 1px 4px rgba(28,25,23,0.04);
   --shadow-brand:0 4px 16px rgba(28,25,23,0.18);
   /* layout */
-  --tab-h:68px;
-  --header-h:60px;
+  --tab-h:64px;
+  --header-h:70px;
   --radius-sm:10px;
   --radius-md:16px;
   --radius-lg:20px;
@@ -505,26 +528,37 @@ strong{{font-weight:600;color:var(--text)}}
   background:var(--brand);
   color:var(--brand-text);
   display:flex;align-items:center;justify-content:space-between;
-  padding:0 20px;
+  padding:0 18px;
   padding-top:env(safe-area-inset-top);
   z-index:100;
-  /* subtle texture gradient */
-  background-image:linear-gradient(135deg,rgba(255,255,255,0.06) 0%,transparent 60%);
+  gap:12px;
+  background-image:
+    linear-gradient(135deg,rgba(255,255,255,0.10) 0%,transparent 50%),
+    linear-gradient(to bottom,rgba(0,0,0,0.08) 0%,transparent 100%);
+  box-shadow:0 1px 0 rgba(0,0,0,0.12),0 2px 12px rgba(0,0,0,0.15);
 }}
 .app-header-brand{{
   font-family:var(--text-serif);
-  font-size:16px;font-weight:400;
+  font-size:17px;font-weight:500;
   letter-spacing:0.2px;
-  opacity:0.97;
+  opacity:0.96;
+  flex:1;
+  min-width:0;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  line-height:1.2;
 }}
 .app-header-trip{{
-  font-size:11px;
-  letter-spacing:0.4px;
+  font-family:var(--text-sans);
+  font-size:10px;
+  letter-spacing:0.5px;
   text-transform:uppercase;
-  opacity:0.65;
+  opacity:0.6;
   text-align:right;
   line-height:1.5;
-  max-width:155px;
+  flex-shrink:0;
+  max-width:130px;
 }}
 .app-header-trip strong{{
   display:block;
@@ -533,6 +567,11 @@ strong{{font-weight:600;color:var(--text)}}
   letter-spacing:0;text-transform:none;
   opacity:1;color:var(--brand-text);
   margin-bottom:1px;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  max-width:130px;
+  line-height:1.2;
 }}
 
 /* ── TAB BAR ───────────────────────────────────────────────────────────── */
@@ -541,27 +580,35 @@ strong{{font-weight:600;color:var(--text)}}
   height:var(--tab-h);
   padding-bottom:env(safe-area-inset-bottom);
   background:var(--bg-nav);
-  backdrop-filter:blur(24px) saturate(180%);
-  -webkit-backdrop-filter:blur(24px) saturate(180%);
+  backdrop-filter:blur(28px) saturate(200%);
+  -webkit-backdrop-filter:blur(28px) saturate(200%);
   border-top:1px solid var(--border);
   display:grid;grid-template-columns:{grid_cols};
   z-index:100;
 }}
 .tab-btn{{
   display:flex;flex-direction:column;align-items:center;justify-content:center;
-  gap:2px;border:none;background:none;cursor:pointer;
+  gap:3px;border:none;background:none;cursor:pointer;
   color:var(--text-muted);
   font-family:var(--text-sans);
   font-size:10px;font-weight:500;
-  letter-spacing:0.3px;
-  padding:8px 0;
+  letter-spacing:0.2px;
+  padding:10px 0 8px;
   transition:color 0.2s;
   touch-action:manipulation;
+  position:relative;
 }}
-.tab-btn .tab-icon{{font-size:20px;line-height:1;transition:transform 0.2s}}
+.tab-btn::before{{
+  content:'';position:absolute;top:0;left:25%;right:25%;
+  height:2px;border-radius:0 0 2px 2px;
+  background:var(--brand);
+  transform:scaleX(0);transition:transform 0.2s cubic-bezier(0.4,0,0.2,1);
+}}
+.tab-btn.active::before{{transform:scaleX(1)}}
+.tab-btn .tab-icon{{font-size:20px;line-height:1;transition:transform 0.18s}}
 .tab-btn.active{{color:var(--brand)}}
-.tab-btn.active .tab-icon{{transform:scale(1.1)}}
-.tab-btn:active .tab-icon{{transform:scale(0.92)}}
+.tab-btn.active .tab-icon{{transform:translateY(-1px)}}
+.tab-btn:active .tab-icon{{transform:scale(0.88)}}
 
 /* ── BODY / PANELS ─────────────────────────────────────────────────────── */
 .app-body{{position:fixed;top:var(--header-h);bottom:var(--tab-h);left:0;right:0;overflow:hidden}}
@@ -587,31 +634,36 @@ strong{{font-weight:600;color:var(--text)}}
 
 /* ── CALENDAR STRIP ────────────────────────────────────────────────────── */
 .cal-strip{{
-  display:flex;gap:7px;overflow-x:auto;
-  padding:14px 14px 10px;
+  display:flex;gap:8px;overflow-x:auto;
+  padding:14px 16px 12px;
   scrollbar-width:none;
+  position:sticky;top:0;z-index:20;
+  background:var(--bg);
+  border-bottom:1px solid var(--border);
+  box-shadow:0 2px 12px rgba(0,0,0,0.05);
 }}
 .cal-strip::-webkit-scrollbar{{display:none}}
 .cal-day{{
-  min-width:46px;height:62px;
-  border-radius:12px;border:1px solid var(--border);
+  min-width:50px;height:66px;
+  border-radius:14px;border:1.5px solid var(--border);
   cursor:pointer;background:var(--bg-card);
   color:var(--text-muted);
   font-family:var(--text-sans);
-  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
   box-shadow:var(--shadow-xs);
   touch-action:manipulation;
-  transition:all 0.18s;
+  transition:all 0.2s cubic-bezier(0.4,0,0.2,1);
   flex-shrink:0;
 }}
-.cal-day:active{{transform:scale(0.93)}}
+.cal-day:active{{transform:scale(0.91)}}
 .cal-day.active{{
   background:var(--brand);color:var(--brand-text);
   border-color:transparent;
-  box-shadow:var(--shadow-brand);
+  box-shadow:0 4px 16px rgba(0,0,0,0.18);
+  transform:translateY(-1px);
 }}
-.cal-day-num{{font-size:17px;font-weight:700;line-height:1}}
-.cal-day-mon{{font-size:10px;font-weight:500;letter-spacing:0.3px;opacity:0.75;text-transform:uppercase}}
+.cal-day-num{{font-size:18px;font-weight:700;line-height:1;font-family:var(--text-serif)}}
+.cal-day-mon{{font-size:9.5px;font-weight:600;letter-spacing:0.5px;opacity:0.7;text-transform:uppercase}}
 
 /* ── DAY CARDS ─────────────────────────────────────────────────────────── */
 .day-card{{
@@ -635,36 +687,39 @@ strong{{font-weight:600;color:var(--text)}}
 
 /* Large editorial day number */
 .day-num-badge{{
-  width:44px;height:44px;
-  border-radius:11px;
+  width:46px;height:46px;
+  border-radius:12px;
   border:1.5px solid var(--border-strong);
   display:flex;align-items:center;justify-content:center;
   flex-shrink:0;
   position:relative;overflow:hidden;
+  transition:all 0.2s;
 }}
 .day-num-badge-inner{{
   font-family:var(--text-serif);
-  font-size:18px;font-weight:400;
+  font-size:20px;font-weight:500;
   color:var(--brand);
   line-height:1;
 }}
 .day-card.open .day-num-badge{{
   background:var(--brand);
   border-color:transparent;
+  box-shadow:0 2px 10px rgba(0,0,0,0.15);
 }}
 .day-card.open .day-num-badge-inner{{color:var(--brand-text)}}
 
 .day-info{{flex:1;min-width:0}}
 .day-info-title{{
   font-family:var(--text-serif);
-  font-size:16px;font-weight:400;
+  font-size:17px;font-weight:400;
   color:var(--text);
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  letter-spacing:-0.1px;
 }}
 .day-info-meta{{
-  font-size:11px;
+  font-size:10.5px;
   color:var(--text-muted);
-  letter-spacing:0.3px;
+  letter-spacing:0.4px;
   text-transform:uppercase;
   margin-top:3px;
 }}
@@ -684,34 +739,54 @@ strong{{font-weight:600;color:var(--text)}}
 
 /* ── TIMELINE ──────────────────────────────────────────────────────────── */
 .tl-label{{
-  font-size:11px;font-weight:600;
-  letter-spacing:0.6px;text-transform:uppercase;
+  font-size:10px;font-weight:600;
+  letter-spacing:1px;text-transform:uppercase;
   color:var(--text-muted);
-  margin:14px 0 8px;
+  margin:16px 0 10px;
+  display:flex;align-items:center;gap:8px;
 }}
-.timeline{{list-style:none;padding:0;margin:0}}
+.tl-label::after{{content:'';flex:1;height:1px;background:var(--divider)}}
+.timeline{{list-style:none;padding:0;margin:0;position:relative}}
+.timeline::before{{
+  content:'';
+  position:absolute;left:51px;top:8px;bottom:8px;
+  width:1px;background:var(--divider);
+  pointer-events:none;
+}}
 .timeline li{{
-  display:flex;gap:12px;
-  padding:8px 0;
-  border-bottom:1px solid var(--divider);
+  display:flex;gap:0;
+  padding:7px 0;
   font-size:14px;
   line-height:1.5;
   align-items:flex-start;
+  position:relative;
 }}
-.timeline li:last-child{{border-bottom:none}}
 .timeline-time{{
   color:var(--brand);
   font-family:var(--text-sans);
-  font-size:12px;font-weight:600;
-  letter-spacing:0.3px;
+  font-size:11.5px;font-weight:600;
+  letter-spacing:0.2px;
   min-width:52px;
   padding-top:2px;
   flex-shrink:0;
   white-space:nowrap;
 }}
-.timeline-content{{flex:1;color:var(--text-secondary)}}
+.timeline-dot{{
+  width:7px;height:7px;border-radius:50%;
+  background:var(--border-strong);
+  flex-shrink:0;margin:5px 12px 0 0;
+  position:relative;z-index:1;
+}}
+.timeline-content{{flex:1;color:var(--text-secondary);padding-top:1px}}
 .timeline-content strong{{color:var(--text)}}
-.timeline-content a{{color:var(--accent)}}
+.timeline-content a.attr-link{{
+  color:var(--text);
+  text-decoration:none;
+  border-bottom:1px solid rgba(0,0,0,0.2);
+  padding-bottom:0;
+  transition:color 0.15s,border-color 0.15s;
+}}
+.timeline-content a.attr-link:hover{{color:var(--accent);border-color:var(--accent)}}
 
 /* ── INFO BOXES ────────────────────────────────────────────────────────── */
 .box{{
@@ -747,46 +822,53 @@ strong{{font-weight:600;color:var(--text)}}
 .hotel-card{{
   background:var(--bg-card);
   border-radius:var(--radius-md);
-  padding:16px;margin-bottom:12px;
+  padding:0;margin-bottom:12px;
   border:1px solid var(--border);
   box-shadow:var(--shadow-sm);
+  overflow:hidden;
+}}
+.hotel-card-header{{
+  padding:14px 16px 12px;
+  border-bottom:1px solid var(--divider);
+  background:linear-gradient(to right,rgba(0,0,0,0.015),transparent);
 }}
 .hotel-card-eyebrow{{
-  font-size:10px;font-weight:600;
-  letter-spacing:0.8px;text-transform:uppercase;
-  color:var(--text-muted);
-  margin-bottom:8px;
-  display:flex;align-items:center;gap:6px;
+  font-size:9.5px;font-weight:700;
+  letter-spacing:1px;text-transform:uppercase;
+  color:var(--brand);
+  margin-bottom:6px;
+  display:flex;align-items:center;gap:8px;
 }}
-.hotel-card-eyebrow-line{{flex:1;height:1px;background:var(--border)}}
+.hotel-card-eyebrow-line{{flex:1;height:1px;background:var(--divider)}}
 .hotel-card-name{{
   font-family:var(--text-serif);
-  font-size:18px;font-weight:400;
+  font-size:20px;font-weight:500;
   color:var(--text);
-  margin-bottom:3px;
+  margin-bottom:2px;
+  letter-spacing:-0.2px;
+  line-height:1.2;
 }}
 .hotel-card-loc{{
-  font-size:12px;
-  letter-spacing:0.3px;
+  font-size:11.5px;
+  letter-spacing:0.4px;
   text-transform:uppercase;
   color:var(--text-muted);
-  margin-bottom:10px;
+  margin-bottom:0;
 }}
 .hotel-card-rating{{
-  display:inline-flex;align-items:center;gap:5px;
+  display:inline-flex;align-items:center;gap:4px;
   background:var(--brand);color:var(--brand-text);
-  font-size:12px;font-weight:700;
-  padding:3px 10px;border-radius:20px;
-  margin-bottom:10px;
+  font-size:11px;font-weight:700;
+  padding:2px 9px;border-radius:20px;
+  margin-top:8px;
   letter-spacing:0.2px;
 }}
+.hotel-card-body{{padding:14px 16px}}
 .hotel-card-meta{{
-  font-size:13px;
+  font-size:13.5px;
   color:var(--text-secondary);
-  line-height:1.55;
-  margin-bottom:12px;
-  padding-top:10px;
-  border-top:1px solid var(--divider);
+  line-height:1.6;
+  margin-bottom:14px;
 }}
 .hotel-card-actions{{display:flex;gap:8px;flex-wrap:wrap}}
 
@@ -958,52 +1040,58 @@ strong{{font-weight:600;color:var(--text)}}
 
 /* ── SOS ───────────────────────────────────────────────────────────────── */
 .sos-btn-huge{{
-  width:100%;padding:24px 20px;
+  width:100%;padding:16px 20px;
   border-radius:var(--radius-md);
-  background:var(--danger);color:#fff;
+  background:var(--brand);color:var(--brand-text);
   font-family:var(--text-sans);
-  font-size:18px;font-weight:700;
+  font-size:15px;font-weight:700;
   letter-spacing:0.3px;
-  border:none;cursor:pointer;margin-bottom:20px;
-  box-shadow:0 4px 16px rgba(192,57,43,0.3);
+  border:none;cursor:pointer;margin-bottom:16px;
+  box-shadow:var(--shadow-brand);
   touch-action:manipulation;
+  display:flex;align-items:center;justify-content:center;gap:8px;
 }}
 .sos-btn-huge:active{{transform:scale(0.98)}}
 .list-group{{
   background:var(--bg-card);
   border-radius:var(--radius-md);
   overflow:hidden;
-  margin-bottom:16px;
+  margin-bottom:12px;
   border:1px solid var(--border);
   box-shadow:var(--shadow-xs);
 }}
 .phone-row{{
   display:flex;align-items:center;
-  padding:14px 16px;
+  padding:10px 14px;
   border-bottom:1px solid var(--divider);
+  gap:10px;
 }}
 .phone-row:last-child{{border-bottom:none}}
-.phone-info{{flex:1}}
-.phone-name{{font-weight:600;font-size:14px}}
-.phone-desc{{font-size:12px;color:var(--text-muted);margin-top:2px}}
+.phone-info{{flex:1;min-width:0}}
+.phone-name{{font-weight:600;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}
+.phone-desc{{font-size:11.5px;color:var(--text-muted);margin-top:1px}}
 .call-btn{{
-  background:var(--success);color:#fff;
-  padding:8px 16px;border-radius:20px;
-  display:inline-flex;align-items:center;gap:5px;
-  font-size:13px;font-weight:600;text-decoration:none;
+  background:transparent;
+  color:var(--accent);
+  border:1.5px solid var(--accent);
+  padding:6px 14px;border-radius:20px;
+  display:inline-flex;align-items:center;gap:4px;
+  font-size:12.5px;font-weight:600;text-decoration:none;
   white-space:nowrap;
-  transition:opacity 0.15s;
+  transition:background 0.15s,color 0.15s;
   touch-action:manipulation;
   flex-shrink:0;
 }}
-.call-btn:active{{opacity:0.75}}
-.list-header{{
-  font-size:11px;font-weight:600;
-  letter-spacing:0.6px;text-transform:uppercase;
-  color:var(--text-muted);
-  padding:18px 2px 7px;
+.call-btn:active,.call-btn:hover{{
+  background:var(--accent);color:#fff;
 }}
-.list-header:first-child{{padding-top:4px}}
+.list-header{{
+  font-size:10.5px;font-weight:600;
+  letter-spacing:0.8px;text-transform:uppercase;
+  color:var(--text-muted);
+  padding:14px 2px 5px;
+}}
+.list-header:first-child{{padding-top:2px}}
 
 /* ── LOOMTRIP BADGE ────────────────────────────────────────────────────── */
 .loomtrip-badge{{
@@ -1026,8 +1114,8 @@ strong{{font-weight:600;color:var(--text)}}
 </head>
 <body>
 <header class="app-header">
-  <div style="display:flex;align-items:center;gap:10px;">
-    {"<img src='" + logo_url + "' style='height:28px;border-radius:6px;' alt=''>" if logo_url else ""}
+  <div style="display:flex;align-items:center;gap:10px;min-width:0;flex:1;overflow:hidden;">
+    {"<img src='" + logo_url + "' style='height:26px;border-radius:5px;flex-shrink:0;' alt=''>" if logo_url else ""}
     <div class="app-header-brand">{dmc_name}</div>
   </div>
   <div class="app-header-trip"><strong>{destination}</strong><br>{trip_subtitle}</div>
@@ -1037,6 +1125,7 @@ strong{{font-weight:600;color:var(--text)}}
   <!-- DAYS TAB -->
   <section class="tab-panel active no-padding" id="tab-days">
     <div class="cal-strip" id="calendar-strip"></div>
+    {"<div style='padding:14px 16px 0'><div class='box gold' style='margin-bottom:0;padding:12px 16px;'><span style='font-size:13px;'>👋 </span><strong>" + client_name + "</strong> — " + t.get('welcome','welcome to your trip') + "</div></div>" if client_name else ""}
     <div id="days-list"></div>
   </section>
 
@@ -1047,7 +1136,7 @@ strong{{font-weight:600;color:var(--text)}}
 {audio_tab_html}
   <!-- INFO TAB -->
   <section class="tab-panel" id="tab-info">
-    <div class="card"><h3>✈️ {trip_title}</h3><p>{trip_subtitle}</p><p class="small muted mb-0">Crafted by {dmc_name}</p></div>
+    <div class="card"><h3>✈️ {trip_title}</h3><p>{trip_subtitle}</p>{"<p class='small' style='margin-top:4px;'><strong>" + client_name + "</strong></p>" if client_name else ""}<p class="small muted mb-0">Crafted by {dmc_name}</p></div>
     <div id="flights-section"></div>
     <div class="box gold" style="margin-top:0;"><div class="box-title">🌟 Your dedicated team</div>{dmc_name} is with you 24/7.{"<br><br><a href='tel:" + dmc_phone + "' class='btn btn-brand' style='margin-top:8px;'>📞 " + t["call"] + "</a>" if dmc_phone else ""}</div>
     <div class="card"><h3>📱 This App</h3><p class="small">Your complete trip: day-by-day programme, all hotels{"," if audio_chapters else ""}{" audio guide," if audio_chapters else ""} and emergency contacts — works offline.</p></div>
@@ -1109,18 +1198,22 @@ function renderDays() {{
     const hotel=day.hotel_n?HOTELS.find(h=>h.n===day.hotel_n):null;
     const hb=hotel?`
       <div class="hotel-card" style="margin-top:14px;">
-        <div class="hotel-card-eyebrow">Tonight<span class="hotel-card-eyebrow-line"></span></div>
-        <div class="hotel-card-name">${{hotel.name}}</div>
-        <div class="hotel-card-loc">${{hotel.loc}}</div>
-        ${{hotel.rating?`<div class="hotel-card-rating">★ ${{hotel.rating}}</div>`:''}}
-        <div class="hotel-card-meta">${{hotel.meta}}</div>
-        <div class="hotel-card-actions">
-          <a class="btn" href="${{M(hotel.map_query)}}" target="_blank">{t["map"]}</a>
-          ${{hotel.phone?`<a class="btn btn-success" href="tel:${{hotel.phone}}">{t["call"]}</a>`:''}}
+        <div class="hotel-card-header">
+          <div class="hotel-card-eyebrow">Tonight<span class="hotel-card-eyebrow-line"></span></div>
+          <div class="hotel-card-name">${{hotel.name}}</div>
+          <div class="hotel-card-loc">${{hotel.loc}}</div>
+          ${{hotel.rating?`<div class="hotel-card-rating">★ ${{hotel.rating}}</div>`:''}}
+        </div>
+        <div class="hotel-card-body">
+          <div class="hotel-card-meta">${{hotel.meta}}</div>
+          <div class="hotel-card-actions">
+            <a class="btn" href="${{M(hotel.map_query)}}" target="_blank">{t["map"]}</a>
+            ${{hotel.phone?`<a class="btn btn-success" href="tel:${{hotel.phone}}">{t["call"]}</a>`:''}}
+          </div>
         </div>
       </div>`:'';
     const tl=(day.timeline||[]).map(([tm,c])=>`
-      <li><span class="timeline-time">${{tm}}</span><span class="timeline-content">${{c}}</span></li>`
+      <li><span class="timeline-time">${{tm}}</span><span class="timeline-dot"></span><span class="timeline-content">${{c}}</span></li>`
     ).join('');
     const bx=(day.boxes||[]).map(b=>`
       <div class="box ${{b.type}}"><div class="box-title">${{b.title}}</div><div class="box-body">${{b.text}}</div></div>`
@@ -1144,20 +1237,42 @@ function renderDays() {{
     </div>`;
   }});
   document.getElementById('days-list').innerHTML=html;
+  linkAttractions();
   setTimeout(()=>openDay(1),100);
+}}
+
+function linkAttractions() {{
+  // Auto-wrap <strong> tags in timeline items with Google Maps search links
+  const dest = encodeURIComponent("{destination}");
+  document.querySelectorAll('.timeline-content strong').forEach(el => {{
+    const name = el.textContent.trim();
+    if (!name || name.length < 3) return;
+    const query = encodeURIComponent(name + ', ' + "{destination}");
+    const a = document.createElement('a');
+    a.href = `https://www.google.com/maps/search/?api=1&query=${{query}}`;
+    a.target = '_blank';
+    a.rel = 'noopener';
+    a.className = 'attr-link';
+    a.innerHTML = el.innerHTML;
+    el.parentNode.replaceChild(a, el);
+  }});
 }}
 function renderHotels() {{
   document.getElementById('hotels-list').innerHTML=HOTELS.map((h,i)=>`
     <div class="hotel-card">
-      <div class="hotel-card-eyebrow">Night ${{h.n}}<span class="hotel-card-eyebrow-line"></span>${{h.dates}}</div>
-      <div class="hotel-card-name">${{h.name}}</div>
-      <div class="hotel-card-loc">${{h.loc}}</div>
-      ${{h.rating?`<div class="hotel-card-rating">★ ${{h.rating}}</div>`:''}}
-      <div class="hotel-card-meta">${{h.meta}}<br><span style="font-size:12px;color:var(--text-muted);display:block;margin-top:6px;">📍 ${{h.addr}}</span></div>
-      <div class="hotel-card-actions">
-        <a class="btn" href="${{M(h.map_query)}}" target="_blank">{t["map"]}</a>
-        ${{h.phone?`<a class="btn btn-success" href="tel:${{h.phone}}">{t["call"]}</a>`:''}}
-        ${{h.web?`<a class="btn" href="https://${{h.web}}" target="_blank">{t["web"]}</a>`:''}}
+      <div class="hotel-card-header">
+        <div class="hotel-card-eyebrow">Night ${{h.n}}<span class="hotel-card-eyebrow-line"></span>${{h.dates}}</div>
+        <div class="hotel-card-name">${{h.name}}</div>
+        <div class="hotel-card-loc">${{h.loc}}</div>
+        ${{h.rating?`<div class="hotel-card-rating">★ ${{h.rating}}</div>`:''}}
+      </div>
+      <div class="hotel-card-body">
+        <div class="hotel-card-meta">${{h.meta}}<br><span style="font-size:11.5px;color:var(--text-muted);display:block;margin-top:6px;letter-spacing:0.1px;">📍 ${{h.addr}}</span></div>
+        <div class="hotel-card-actions">
+          <a class="btn" href="${{M(h.map_query)}}" target="_blank">{t["map"]}</a>
+          ${{h.phone?`<a class="btn btn-success" href="tel:${{h.phone}}">{t["call"]}</a>`:''}}
+          ${{h.web?`<a class="btn" href="https://${{h.web}}" target="_blank">{t["web"]}</a>`:''}}
+        </div>
       </div>
     </div>`).join('');
 }}
@@ -1167,14 +1282,20 @@ function renderSOS() {{
     ${{CONTACTS.length?CONTACTS.map(g=>`
       <div class="list-header">${{g.group}}</div>
       <div style="font-size:12px;color:var(--text-muted);padding:0 16px 6px">${{g.org}}${{g.addr?` · ${{g.addr}}`:''}}</div>
-      <div class="list-group">${{g.entries.map(e=>`
-        <div class="phone-row">
+      <div class="list-group">${{g.entries.map(e=>{{
+        const isWA = e.label && /whatsapp/i.test(e.label);
+        const waNum = e.phone ? e.phone.replace(/[^0-9]/g,'') : '';
+        return `<div class="phone-row">
           <div class="phone-info">
             <div class="phone-name">${{e.label}}</div>
             <div class="phone-desc">${{e.phone_display}}</div>
           </div>
-          <a class="call-btn" href="tel:${{e.phone}}">📞 {t["call"].replace("📞 ","")}</a>
-        </div>`).join('')}}
+          <div style="display:flex;gap:6px;flex-shrink:0;">
+            ${{isWA ? `<a class="call-btn" href="https://wa.me/${{waNum}}" target="_blank" style="background:rgba(37,211,102,0.12);border-color:rgba(37,211,102,0.4);color:#1a9e50;">💬 WhatsApp</a>` : ''}}
+            <a class="call-btn" href="tel:${{e.phone}}">📞 {t["call"].replace("📞 ","")}</a>
+          </div>
+        </div>`;
+      }}).join('')}}
       </div>`).join(''):`<div class="list-header">{dmc_name}</div><div class="list-group"><div class="phone-row"><div class="phone-info"><div class="phone-name">{dmc_name} — 24h</div></div>${{'{dmc_phone}'?`<a class="call-btn" href="tel:{dmc_phone}">📞 {t["call"].replace("📞 ","")}</a>`:''}}
 </div></div>`}}
     <div class="list-header">Hotels</div>

@@ -19,6 +19,7 @@ if os.path.isdir(_deps) and _deps not in sys.path:
     sys.path.insert(0, _deps)
 
 from flask import Flask, request, jsonify, send_from_directory, render_template_string, Response
+from functools import wraps
 import anthropic, httpx
 
 app = Flask(__name__)
@@ -27,6 +28,22 @@ app.config["MAX_CONTENT_LENGTH"] = 20 * 1024 * 1024  # 20 MB upload limit
 BASE_DIR   = Path(__file__).parent
 BUILDS_DIR = BASE_DIR / "builds"
 BUILDS_DIR.mkdir(exist_ok=True)
+
+# ─── Admin auth ───────────────────────────────────────────────────────────────
+ADMIN_USER = os.environ.get("ADMIN_USER", "admin")
+ADMIN_PASS = os.environ.get("ADMIN_PASS", "")
+
+def require_admin(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not ADMIN_PASS:
+            return f(*args, **kwargs)  # no password set → open (local dev)
+        auth = request.authorization
+        if not auth or auth.username != ADMIN_USER or auth.password != ADMIN_PASS:
+            return Response("Unauthorised", 401,
+                            {"WWW-Authenticate": 'Basic realm="Loomtrip Admin"'})
+        return f(*args, **kwargs)
+    return decorated
 
 # ─── in-memory job store ─────────────────────────────────────────────────────
 jobs = {}  # job_id → {status, log, output_dir}
@@ -37,136 +54,484 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Loomtrip — Admin</title>
+<title>Loomtrip — Studio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Playfair+Display:wght@400;500&display=swap" rel="stylesheet">
 <style>
 :root {
-  --brand: #1C1917;
-  --accent: #8B4513;
-  --bg: #FAF8F5;
-  --card: #fff;
-  --border: rgba(28,25,23,0.1);
-  --text: #1C1917;
-  --muted: #78716C;
-  --success: #276749;
+  --sidebar-bg: #0F0E0D;
+  --sidebar-border: rgba(255,255,255,0.07);
+  --sidebar-text: rgba(255,255,255,0.88);
+  --sidebar-muted: rgba(255,255,255,0.38);
+  --sidebar-input-bg: rgba(255,255,255,0.06);
+  --sidebar-input-border: rgba(255,255,255,0.10);
+  --sidebar-input-focus: rgba(255,255,255,0.22);
+  --accent: #C4873A;
+  --accent-dim: rgba(196,135,58,0.15);
+  --main-bg: #F7F5F2;
+  --card: #FFFFFF;
+  --border: rgba(0,0,0,0.08);
+  --text: #18160F;
+  --muted: #8A8278;
+  --success: #2A7A4E;
   --danger: #C0392B;
-  --serif: Georgia,"Times New Roman",serif;
-  --sans: -apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",sans-serif;
-  --radius: 14px;
-  --shadow: 0 2px 12px rgba(28,25,23,0.07);
+  --serif: 'Playfair Display', Georgia, serif;
+  --sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --radius: 12px;
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md: 0 4px 16px rgba(0,0,0,0.08), 0 1px 4px rgba(0,0,0,0.04);
 }
-* { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: var(--sans); background: var(--bg); color: var(--text); font-size: 15px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
-.top-bar { background: var(--brand); color: #fff; padding: 0 32px; height: 56px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
-.top-bar-brand { font-family: var(--serif); font-size: 17px; font-weight: 400; letter-spacing: 0.2px; }
-.top-bar-sub { font-size: 12px; opacity: 0.55; letter-spacing: 0.4px; text-transform: uppercase; }
-.layout { display: grid; grid-template-columns: 380px 1fr; gap: 0; min-height: calc(100vh - 56px); }
-.sidebar { border-right: 1px solid var(--border); padding: 28px 24px; }
-.main { padding: 28px 32px; }
-h2 { font-family: var(--serif); font-size: 20px; font-weight: 400; margin-bottom: 20px; }
-h3 { font-family: var(--serif); font-size: 16px; font-weight: 400; margin-bottom: 12px; color: var(--muted); }
-.section { margin-bottom: 28px; }
-label { display: block; font-size: 12px; font-weight: 600; letter-spacing: 0.4px; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
-input[type=text], input[type=color], select, textarea {
-  width: 100%; padding: 10px 13px;
-  border: 1px solid var(--border); border-radius: 9px;
-  font-family: var(--sans); font-size: 14px; color: var(--text);
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 15px; }
+body { font-family: var(--sans); background: var(--main-bg); color: var(--text); line-height: 1.55; -webkit-font-smoothing: antialiased; display: flex; min-height: 100vh; }
+
+/* ── SIDEBAR ── */
+.sidebar {
+  width: 380px; min-width: 380px; background: var(--sidebar-bg);
+  display: flex; flex-direction: column;
+  position: sticky; top: 0; height: 100vh; overflow-y: auto;
+  border-right: 1px solid var(--sidebar-border);
+}
+.sidebar-header {
+  padding: 28px 28px 20px;
+  border-bottom: 1px solid var(--sidebar-border);
+}
+.wordmark {
+  font-family: var(--serif); font-size: 22px; font-weight: 400;
+  color: #fff; letter-spacing: -0.3px; margin-bottom: 2px;
+}
+.wordmark-sub {
+  font-size: 10.5px; letter-spacing: 2px; text-transform: uppercase;
+  color: var(--sidebar-muted); font-weight: 500;
+}
+.sidebar-body { padding: 24px 28px; flex: 1; }
+.sidebar-footer { padding: 20px 28px; border-top: 1px solid var(--sidebar-border); }
+
+.section { margin-bottom: 22px; }
+.section:last-child { margin-bottom: 0; }
+
+label {
+  display: block; font-size: 10.5px; font-weight: 600;
+  letter-spacing: 1.2px; text-transform: uppercase;
+  color: var(--sidebar-muted); margin-bottom: 7px;
+}
+
+/* inputs inside sidebar */
+.sidebar input[type=text],
+.sidebar select,
+.sidebar textarea {
+  width: 100%; padding: 10px 12px;
+  background: var(--sidebar-input-bg);
+  border: 1px solid var(--sidebar-input-border);
+  border-radius: 8px;
+  font-family: var(--sans); font-size: 13.5px;
+  color: var(--sidebar-text); outline: none;
+  transition: border-color 0.15s, background 0.15s;
+  -webkit-appearance: none;
+}
+.sidebar input[type=text]::placeholder,
+.sidebar textarea::placeholder { color: var(--sidebar-muted); }
+.sidebar input[type=text]:focus,
+.sidebar select:focus,
+.sidebar textarea:focus {
+  border-color: var(--sidebar-input-focus);
+  background: rgba(255,255,255,0.09);
+}
+.sidebar select option { background: #1a1814; color: #fff; }
+.sidebar textarea { resize: vertical; min-height: 110px; line-height: 1.5; }
+
+/* drop zone */
+.drop-zone {
+  border: 1.5px dashed rgba(255,255,255,0.14);
+  border-radius: var(--radius); padding: 22px 16px;
+  text-align: center; cursor: pointer;
+  transition: all 0.18s; background: rgba(255,255,255,0.03);
+}
+.drop-zone:hover, .drop-zone.over {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+}
+.drop-zone-icon { font-size: 26px; margin-bottom: 6px; opacity: 0.7; }
+.drop-zone-text { font-size: 12.5px; color: var(--sidebar-muted); }
+.drop-zone-text strong { color: var(--accent); font-weight: 500; }
+#pdf-input { display: none; }
+
+/* pill */
+.pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--accent-dim); color: var(--accent);
+  font-size: 11.5px; font-weight: 500; padding: 5px 11px;
+  border-radius: 20px; border: 1px solid rgba(196,135,58,0.25);
+}
+.pill-remove { cursor: pointer; opacity: 0.55; font-size: 15px; line-height: 1; }
+.pill-remove:hover { opacity: 1; }
+
+/* divider */
+.divider {
+  display: flex; align-items: center; gap: 10px;
+  margin: 18px 0;
+}
+.divider-line { flex: 1; height: 1px; background: var(--sidebar-border); }
+.divider-text {
+  font-size: 10px; color: var(--sidebar-muted);
+  letter-spacing: 1px; text-transform: uppercase;
+}
+
+/* color row */
+.color-row { display: flex; gap: 8px; align-items: center; }
+.color-row input[type=color] {
+  width: 40px; height: 38px; padding: 3px;
+  border: 1px solid var(--sidebar-input-border);
+  border-radius: 8px; background: var(--sidebar-input-bg);
+  cursor: pointer;
+}
+.color-swatch { display: flex; gap: 7px; flex-wrap: wrap; margin-top: 9px; }
+.swatch {
+  width: 26px; height: 26px; border-radius: 6px;
+  cursor: pointer; border: 2px solid transparent;
+  transition: transform 0.12s, border-color 0.12s;
+}
+.swatch:hover { transform: scale(1.18); }
+.swatch.active { border-color: rgba(255,255,255,0.7); }
+
+/* toggle row */
+.toggle-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 11px 13px; border-radius: 8px;
+  background: var(--sidebar-input-bg);
+  border: 1px solid var(--sidebar-input-border);
+  cursor: pointer; user-select: none;
+}
+.toggle-row-label { font-size: 13px; color: var(--sidebar-text); }
+.toggle {
+  width: 36px; height: 20px; background: rgba(255,255,255,0.15);
+  border-radius: 10px; position: relative;
+  transition: background 0.2s; flex-shrink: 0;
+}
+.toggle.on { background: var(--accent); }
+.toggle::after {
+  content: ''; position: absolute; top: 2px; left: 2px;
+  width: 16px; height: 16px; border-radius: 50%;
+  background: #fff; transition: transform 0.2s;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+.toggle.on::after { transform: translateX(16px); }
+#no-audio { display: none; }
+
+/* generate button */
+.btn-generate {
+  width: 100%; padding: 13px 20px;
+  background: var(--accent); color: #fff;
+  border: none; border-radius: 10px;
+  font-family: var(--sans); font-size: 14px; font-weight: 600;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  gap: 8px; transition: filter 0.15s, transform 0.12s;
+  letter-spacing: 0.1px;
+}
+.btn-generate:hover { filter: brightness(1.08); }
+.btn-generate:active { transform: scale(0.98); }
+.btn-generate:disabled { opacity: 0.45; cursor: not-allowed; filter: none; transform: none; }
+
+/* ── MAIN ── */
+.main { flex: 1; padding: 36px 40px; overflow-y: auto; }
+
+.page-header {
+  display: flex; align-items: baseline; justify-content: space-between;
+  margin-bottom: 28px;
+}
+.page-title { font-family: var(--serif); font-size: 26px; font-weight: 400; color: var(--text); }
+.page-count { font-size: 12px; color: var(--muted); letter-spacing: 0.3px; }
+
+/* log section */
+.log-section { margin-bottom: 36px; }
+.log-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 10px;
+}
+.log-title { font-size: 12px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); }
+.progress-bar { height: 2px; background: var(--border); border-radius: 2px; overflow: hidden; margin-bottom: 12px; }
+.progress-fill { height: 100%; background: var(--accent); border-radius: 2px; width: 0%; transition: width 0.5s ease; }
+.log-box {
+  background: #111009; color: #C9C6C1;
+  border-radius: var(--radius); padding: 16px 18px;
+  font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+  font-size: 11.5px; line-height: 1.75;
+  min-height: 180px; max-height: 340px; overflow-y: auto;
+  border: 1px solid rgba(255,255,255,0.06);
+  position: relative;
+}
+.log-line { display: block; }
+.log-ok   { color: #4ADE80; }
+.log-err  { color: #F87171; }
+.log-info { color: #FCD34D; }
+
+/* waiting indicator */
+.log-waiting {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 14px;
+}
+.log-spinner {
+  width: 28px; height: 28px;
+  border: 2.5px solid rgba(255,255,255,0.08);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.75s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.log-waiting-text {
+  font-family: var(--sans); font-size: 12px;
+  color: rgba(255,255,255,0.3); letter-spacing: 0.3px;
+}
+.log-dots::after {
+  content: '';
+  animation: dots 1.4s steps(4, end) infinite;
+}
+@keyframes dots {
+  0%   { content: ''; }
+  25%  { content: '.'; }
+  50%  { content: '..'; }
+  75%  { content: '...'; }
+  100% { content: ''; }
+}
+
+/* ── GMAIL / EXCEL TABLE ── */
+.trip-table { width: 100%; border-collapse: collapse; }
+.trip-table-head {
+  display: grid;
+  grid-template-columns: 32px 1fr 160px 56px 80px 90px 32px;
+  padding: 0 12px 0 8px;
+  border-bottom: 2px solid var(--border);
+  margin-bottom: 0;
+}
+.trip-table-head-cell {
+  font-size: 10.5px; font-weight: 600; letter-spacing: 0.4px;
+  text-transform: uppercase; color: var(--muted);
+  padding: 6px 8px 6px 0;
+  white-space: nowrap; overflow: hidden;
+}
+.trip-row {
+  display: grid;
+  grid-template-columns: 32px 1fr 160px 56px 80px 90px 32px;
+  align-items: center;
+  padding: 0 12px 0 8px;
+  border-bottom: 1px solid var(--border);
+  cursor: default;
+  transition: background 0.1s;
+  position: relative;
+  min-height: 48px;
+}
+.trip-row:hover { background: rgba(196,135,58,0.04); }
+.trip-row:hover .row-actions { opacity: 1; }
+.trip-row:hover .trip-col-date { opacity: 0; }
+.trip-row-cb { display: flex; align-items: center; }
+.trip-row-cb input[type=checkbox] {
+  width: 16px; height: 16px; cursor: pointer; accent-color: var(--accent);
+}
+.trip-col { padding: 10px 8px 10px 0; overflow: hidden; }
+.trip-col-name {
+  font-size: 13.5px; font-weight: 500; color: var(--text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.trip-col-sub {
+  font-size: 11px; color: var(--muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  margin-top: 1px;
+}
+.trip-col-client {
+  font-size: 12.5px; color: var(--muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.lang-chip {
+  display: inline-block;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.5px;
+  text-transform: uppercase;
+  padding: 2px 7px; border-radius: 4px;
+  background: rgba(0,0,0,0.05); color: var(--muted);
+}
+.trip-col-date { font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+.code-badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: var(--accent-dim); color: var(--accent);
+  font-size: 10px; font-weight: 700; letter-spacing: 1.2px;
+  padding: 2px 7px; border-radius: 4px;
+  cursor: pointer; white-space: nowrap;
+  transition: background 0.12s;
+}
+.code-badge:hover { background: rgba(196,135,58,0.28); }
+/* Action icons appear on row hover */
+.row-actions {
+  position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+  display: flex; gap: 2px; align-items: center;
+  opacity: 0; transition: opacity 0.12s;
+  background: var(--main-bg);
+  padding: 0 4px 0 12px;
+}
+.row-action-btn {
+  display: flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; border-radius: 6px;
+  border: none; background: none; cursor: pointer; color: var(--muted);
+  text-decoration: none;
+  transition: background 0.12s, color 0.12s;
+}
+.row-action-btn:hover { background: var(--border); color: var(--text); }
+.row-action-btn.danger:hover { background: rgba(192,57,43,0.1); color: var(--danger); }
+.row-action-btn svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.row-action-btn[title]:hover::after {
+  content: attr(title);
+  position: absolute; bottom: calc(100% + 4px); left: 50%; transform: translateX(-50%);
+  background: #222; color: #fff; font-size: 11px; padding: 3px 8px;
+  border-radius: 5px; white-space: nowrap; pointer-events: none; z-index: 10;
+}
+.row-action-btn { position: relative; }
+
+/* filter toolbar — spreadsheet style */
+.filter-toolbar {
+  display: flex; align-items: center; gap: 0;
+  border: 1px solid var(--border); border-radius: 8px;
+  background: var(--card); overflow: hidden;
+  margin-bottom: 16px; box-shadow: var(--shadow-sm);
+}
+.filter-search-wrap { flex: 1; position: relative; }
+.filter-search-icon {
+  position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+  width: 14px; height: 14px; color: var(--muted); pointer-events: none;
+}
+.filter-search {
+  width: 100%; padding: 9px 12px 9px 34px;
+  border: none; border-right: 1px solid var(--border);
+  font-family: var(--sans); font-size: 13px; color: var(--text);
+  background: transparent; outline: none;
+}
+.filter-search::placeholder { color: var(--muted); }
+.filter-divider { width: 1px; background: var(--border); align-self: stretch; }
+.filter-select {
+  padding: 9px 28px 9px 10px; border: none; border-right: 1px solid var(--border);
+  font-family: var(--sans); font-size: 12.5px; color: var(--muted);
+  background: transparent; outline: none; cursor: pointer;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='%238A8278' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 8px center;
+}
+.filter-select:last-child { border-right: none; }
+
+/* empty state */
+.empty-state { text-align: center; padding: 80px 20px; color: var(--muted); }
+.empty-icon { font-size: 44px; margin-bottom: 14px; opacity: 0.25; }
+.empty-title { font-family: var(--serif); font-size: 20px; font-weight: 400; color: var(--text); margin-bottom: 6px; opacity: 0.5; }
+.meta-dot { opacity: 0.35; }
+
+/* filter bar */
+.filter-bar {
+  display: flex; gap: 10px; align-items: center;
+  margin-bottom: 20px; flex-wrap: wrap;
+}
+.filter-search-wrap {
+  flex: 1; min-width: 200px; position: relative;
+}
+.filter-search-icon {
+  position: absolute; left: 11px; top: 50%; transform: translateY(-50%);
+  width: 15px; height: 15px; color: var(--muted); pointer-events: none;
+}
+.filter-search {
+  width: 100%; padding: 9px 12px 9px 34px;
+  border: 1px solid var(--border); border-radius: 8px;
+  font-family: var(--sans); font-size: 13.5px; color: var(--text);
   background: var(--card); outline: none;
   transition: border-color 0.15s;
 }
-input[type=text]:focus, select:focus, textarea:focus { border-color: var(--accent); }
-textarea { resize: vertical; min-height: 140px; }
-.color-row { display: flex; gap: 8px; align-items: center; }
-.color-row input[type=color] { width: 44px; height: 38px; padding: 2px; cursor: pointer; border-radius: 8px; }
-.color-row input[type=text] { flex: 1; }
-.drop-zone {
-  border: 2px dashed var(--border); border-radius: var(--radius);
-  padding: 28px 20px; text-align: center; cursor: pointer;
-  transition: all 0.2s; background: var(--card);
-  margin-bottom: 14px;
+.filter-search:focus { border-color: var(--accent); }
+.filter-select {
+  padding: 9px 12px; border: 1px solid var(--border); border-radius: 8px;
+  font-family: var(--sans); font-size: 13px; color: var(--text);
+  background: var(--card); outline: none; cursor: pointer;
+  transition: border-color 0.15s; -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238A8278' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 10px center;
+  padding-right: 30px;
 }
-.drop-zone:hover, .drop-zone.over { border-color: var(--accent); background: rgba(139,69,19,0.04); }
-.drop-zone-icon { font-size: 32px; margin-bottom: 8px; }
-.drop-zone-text { font-size: 13px; color: var(--muted); }
-.drop-zone-text strong { color: var(--accent); cursor: pointer; }
-#pdf-input { display: none; }
-.pill { display: inline-flex; align-items: center; gap: 6px; background: rgba(139,69,19,0.1); color: var(--accent); font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 20px; }
-.pill-remove { cursor: pointer; opacity: 0.6; font-size: 14px; }
-.btn { display: inline-flex; align-items: center; gap: 6px; padding: 10px 20px; border-radius: 10px; font-size: 14px; font-weight: 600; border: none; cursor: pointer; transition: all 0.15s; font-family: var(--sans); }
-.btn-primary { background: var(--accent); color: #fff; width: 100%; justify-content: center; font-size: 15px; padding: 13px; }
-.btn-primary:hover { filter: brightness(1.1); }
-.btn-primary:active { transform: scale(0.97); }
-.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
-.btn-secondary { background: var(--card); color: var(--text); border: 1px solid var(--border); }
-.btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
-.divider { display: flex; align-items: center; gap: 10px; margin: 14px 0; }
-.divider-line { flex: 1; height: 1px; background: var(--border); }
-.divider-text { font-size: 11px; color: var(--muted); letter-spacing: 0.3px; text-transform: uppercase; }
-/* Job log */
-.log-box { background: #0C0A09; color: #D6D3D1; border-radius: var(--radius); padding: 16px 18px; font-family: "SF Mono","Fira Code",monospace; font-size: 12px; line-height: 1.7; min-height: 200px; max-height: 380px; overflow-y: auto; }
-.log-line { display: block; }
-.log-ok  { color: #34D399; }
-.log-err { color: #F87171; }
-.log-info { color: #FCD34D; }
-/* Builds list */
-.build-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; margin-bottom: 12px; display: flex; align-items: center; gap: 16px; box-shadow: var(--shadow); }
-.build-card-icon { width: 44px; height: 44px; border-radius: 11px; background: rgba(139,69,19,0.1); display: flex; align-items: center; justify-content: center; font-size: 22px; flex-shrink: 0; }
-.build-card-info { flex: 1; min-width: 0; }
-.build-card-name { font-family: var(--serif); font-size: 15px; font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.build-card-meta { font-size: 11px; color: var(--muted); letter-spacing: 0.3px; text-transform: uppercase; margin-top: 2px; }
-.build-card-actions { display: flex; gap: 8px; flex-shrink: 0; }
-.badge { display: inline-block; font-size: 10px; font-weight: 600; letter-spacing: 0.3px; padding: 3px 8px; border-radius: 20px; }
-.badge-ok { background: rgba(39,103,73,0.1); color: var(--success); }
-.badge-running { background: rgba(139,69,19,0.1); color: var(--accent); }
-.badge-error { background: rgba(192,57,43,0.1); color: var(--danger); }
-.empty-state { text-align: center; padding: 60px 20px; color: var(--muted); }
-.empty-icon { font-size: 40px; margin-bottom: 12px; opacity: 0.4; }
-.progress-bar { height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; margin-top: 8px; }
-.progress-fill { height: 100%; background: var(--accent); border-radius: 2px; width: 0%; transition: width 0.4s; }
-.color-swatch { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
-.swatch { width: 28px; height: 28px; border-radius: 7px; cursor: pointer; border: 2px solid transparent; transition: transform 0.15s; }
-.swatch:hover { transform: scale(1.15); }
-.swatch.active { border-color: var(--text); }
-@media(max-width:768px) { .layout { grid-template-columns: 1fr; } }
+.filter-select:focus { border-color: var(--accent); }
+
+/* empty state */
+.empty-state {
+  text-align: center; padding: 80px 20px; color: var(--muted);
+}
+.empty-icon { font-size: 44px; margin-bottom: 14px; opacity: 0.25; }
+.empty-title { font-family: var(--serif); font-size: 20px; font-weight: 400; color: var(--text); margin-bottom: 6px; opacity: 0.5; }
+.empty-sub { font-size: 13px; opacity: 0.7; }
+
+@media(max-width: 860px) {
+  body { flex-direction: column; }
+  .sidebar { width: 100%; min-width: unset; height: auto; position: static; }
+  .main { padding: 24px 20px; }
+}
 </style>
 </head>
 <body>
-<div class="top-bar">
-  <div class="top-bar-brand">Loomtrip</div>
-  <div class="top-bar-sub">Demo Generator</div>
-</div>
 
-<div class="layout">
-  <!-- SIDEBAR — INPUT FORM -->
-  <aside class="sidebar">
-    <h2>New Demo</h2>
+<!-- ── SIDEBAR ── -->
+<aside class="sidebar">
+  <div class="sidebar-header">
+    <div class="wordmark">Loomtrip</div>
+    <div class="wordmark-sub">Trip Studio</div>
+  </div>
 
-    <!-- PDF Upload -->
+  <div id="edit-banner" style="display:none;padding:10px 28px;background:rgba(196,135,58,0.12);border-bottom:1px solid rgba(196,135,58,0.2);">
+    <div style="font-size:11px;color:var(--accent);font-weight:600;letter-spacing:0.5px;margin-bottom:4px;">EDITING TRIP</div>
+    <div style="font-size:12px;color:var(--sidebar-muted);margin-bottom:8px;" id="edit-banner-name"></div>
+    <button onclick="clearEdit()" style="font-size:11px;color:var(--sidebar-muted);background:none;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:4px 10px;cursor:pointer;font-family:var(--sans);">✕ New trip instead</button>
+  </div>
+
+  <div class="sidebar-body">
+
     <div class="section">
-      <label>Upload Itinerary PDF</label>
+      <label>Itinerary PDF</label>
       <div class="drop-zone" id="drop-zone" onclick="document.getElementById('pdf-input').click()">
         <div class="drop-zone-icon">📄</div>
         <div class="drop-zone-text">Drop PDF here or <strong>browse</strong></div>
       </div>
       <input type="file" id="pdf-input" accept=".pdf" onchange="handleFile(this.files[0])">
-      <div id="pdf-pill" style="display:none;margin-bottom:6px;"></div>
+      <div id="pdf-pill" style="display:none;margin-top:6px;"></div>
     </div>
 
-    <div class="divider"><div class="divider-line"></div><div class="divider-text">or paste text</div><div class="divider-line"></div></div>
+    <div class="divider">
+      <div class="divider-line"></div>
+      <div class="divider-text">or paste text</div>
+      <div class="divider-line"></div>
+    </div>
 
-    <!-- Text paste -->
     <div class="section">
       <label>Itinerary Text</label>
-      <textarea id="itin-text" placeholder="Paste the DMC's itinerary here — any format works..."></textarea>
+      <textarea id="itin-text" placeholder="Paste the DMC's itinerary here…"></textarea>
     </div>
 
-    <!-- Brand options -->
     <div class="section">
       <label>Brand Colour</label>
       <div class="color-row">
-        <input type="color" id="color-picker" value="#8B4513" oninput="syncColor(this.value)">
-        <input type="text" id="color-hex" value="#8B4513" placeholder="#8B4513" oninput="syncColorFromText(this.value)" maxlength="7">
+        <input type="color" id="color-picker" value="#C4873A" oninput="syncColor(this.value)">
+        <input type="text" id="color-hex" value="#C4873A" placeholder="#C4873A" oninput="syncColorFromText(this.value)" maxlength="7">
       </div>
       <div class="color-swatch" id="swatches"></div>
+    </div>
+
+    <div class="section">
+      <label>Trip Name</label>
+      <input type="text" id="trip-name" placeholder="e.g. Georgia: Caucasus Highlights">
+    </div>
+
+    <div class="section">
+      <label>Client Name</label>
+      <input type="text" id="client-name" placeholder="e.g. The Zanotelli Family">
+    </div>
+
+    <div class="section">
+      <label>Agency / DMC Name</label>
+      <input type="text" id="agency-name" placeholder="Leave blank to auto-detect from PDF">
+    </div>
+
+    <div class="section">
+      <label>Agency Logo URL</label>
+      <input type="text" id="logo-url" placeholder="https://…/logo.png">
     </div>
 
     <div class="section">
@@ -192,64 +557,115 @@ textarea { resize: vertical; min-height: 140px; }
     </div>
 
     <div class="section">
-      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
-        <input type="checkbox" id="no-audio" style="width:auto">
-        Skip audio generation (faster)
-      </label>
-    </div>
-
-    <button class="btn btn-primary" id="generate-btn" onclick="startGenerate()">
-      ✨ Generate Demo
-    </button>
-  </aside>
-
-  <!-- MAIN — LOG + BUILDS -->
-  <main class="main">
-    <div id="log-section" style="display:none;margin-bottom:32px;">
-      <h2>Generating…</h2>
-      <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
-      <div style="height:10px;"></div>
-      <div class="log-box" id="log-box"></div>
-    </div>
-
-    <div id="builds-section">
-      <h2>Your Demos</h2>
-      <div id="builds-list">
-        <div class="empty-state">
-          <div class="empty-icon">🗺️</div>
-          <p>No demos yet.<br>Upload an itinerary to get started.</p>
-        </div>
+      <input type="checkbox" id="no-audio">
+      <div class="toggle-row" onclick="toggleAudio()">
+        <span class="toggle-row-label">Skip audio <span style="color:var(--sidebar-muted);font-size:12px;">(faster)</span></span>
+        <div class="toggle" id="toggle-audio"></div>
       </div>
     </div>
-  </main>
-</div>
+
+  </div>
+
+  <div class="sidebar-footer">
+    <button class="btn-generate" id="generate-btn" onclick="startGenerate()">
+      <svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1v14M1 8h14"/></svg>
+      Generate Trip
+    </button>
+  </div>
+</aside>
+
+<!-- ── MAIN ── -->
+<main class="main">
+
+  <div id="log-section" class="log-section" style="display:none;">
+    <div class="log-header">
+      <span class="log-title">Build Log</span>
+    </div>
+    <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+    <div class="log-box" id="log-box">
+      <div class="log-waiting" id="log-waiting">
+        <div class="log-spinner"></div>
+        <div class="log-waiting-text">Starting up<span class="log-dots"></span></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="builds-section">
+    <div class="page-header">
+      <div class="page-title">Your Trips</div>
+      <div class="page-count" id="builds-count"></div>
+    </div>
+
+    <div class="filter-toolbar">
+      <div class="filter-search-wrap">
+        <svg class="filter-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input class="filter-search" id="filter-search" type="text" placeholder="Search trips, clients, destinations…" oninput="applyFilters()">
+      </div>
+      <select class="filter-select" id="filter-lang" onchange="applyFilters()">
+        <option value="">All languages</option>
+        <option value="en">🇬🇧 English</option>
+        <option value="it">🇮🇹 Italian</option>
+        <option value="fr">🇫🇷 French</option>
+      </select>
+      <select class="filter-select" id="filter-sort" onchange="applyFilters()">
+        <option value="date-desc">↓ Newest</option>
+        <option value="date-asc">↑ Oldest</option>
+        <option value="name-asc">A→Z Agency</option>
+        <option value="dest-asc">A→Z Destination</option>
+        <option value="client-asc">A→Z Client</option>
+        <option value="days-desc">Most days</option>
+      </select>
+    </div>
+
+    <div id="builds-list">
+      <div class="empty-state">
+        <div class="empty-icon">🗺️</div>
+        <div class="empty-title">No trips yet</div>
+        <div class="empty-sub">Upload an itinerary to generate your first trip.</div>
+      </div>
+    </div>
+  </div>
+
+</main>
 
 <script>
-// ─── Colour presets ──────────────────────────────────────────────────────────
+// ─── Toggle ───────────────────────────────────────────────────────────────────
+function toggleAudio() {
+  const cb = document.getElementById('no-audio');
+  cb.checked = !cb.checked;
+  document.getElementById('toggle-audio').classList.toggle('on', cb.checked);
+}
+
+// ─── Colour presets ───────────────────────────────────────────────────────────
 const PRESETS = [
-  {c:'#8B4513',label:'Tuscany'},
+  {c:'#C4873A',label:'Desert Gold'},
   {c:'#1e3a5f',label:'Coastal'},
   {c:'#2c5f2e',label:'Alpine'},
   {c:'#6B3FA0',label:'Exotic'},
-  {c:'#1a1a2e',label:'City'},
-  {c:'#c17f3b',label:'Desert'},
+  {c:'#1a1a2e',label:'City Night'},
+  {c:'#8B4513',label:'Tuscany'},
   {c:'#1e6b8a',label:'Island'},
   {c:'#5C4033',label:'Safari'},
 ];
 const sw = document.getElementById('swatches');
 PRESETS.forEach(p => {
   const el = document.createElement('div');
-  el.className = 'swatch' + (p.c==='#8B4513'?' active':'');
+  el.className = 'swatch' + (p.c==='#C4873A'?' active':'');
   el.style.background = p.c;
   el.title = p.label;
-  el.onclick = () => { syncColor(p.c); document.getElementById('color-picker').value=p.c; document.querySelectorAll('.swatch').forEach(s=>s.classList.remove('active')); el.classList.add('active'); };
+  el.onclick = () => {
+    syncColor(p.c);
+    document.getElementById('color-picker').value = p.c;
+    document.querySelectorAll('.swatch').forEach(s => s.classList.remove('active'));
+    el.classList.add('active');
+  };
   sw.appendChild(el);
 });
 
-function syncColor(v) { document.getElementById('color-hex').value=v; }
-function syncColorFromText(v) { if(/^#[0-9a-fA-F]{6}$/.test(v)) document.getElementById('color-picker').value=v; }
+function syncColor(v) { document.getElementById('color-hex').value = v; }
+function syncColorFromText(v) { if(/^#[0-9a-fA-F]{6}$/.test(v)) document.getElementById('color-picker').value = v; }
 
-// ─── PDF drag & drop ─────────────────────────────────────────────────────────
+// ─── PDF drag & drop ──────────────────────────────────────────────────────────
 let pdfFile = null;
 const dz = document.getElementById('drop-zone');
 dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('over'); });
@@ -259,46 +675,54 @@ dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('over
 function handleFile(file) {
   if (!file || !file.name.endsWith('.pdf')) return;
   pdfFile = file;
-  document.getElementById('pdf-pill').style.display='block';
-  document.getElementById('pdf-pill').innerHTML=`<span class="pill">📄 ${file.name} <span class="pill-remove" onclick="clearPdf()">×</span></span>`;
-  document.getElementById('drop-zone').style.display='none';
+  document.getElementById('pdf-pill').style.display = 'block';
+  document.getElementById('pdf-pill').innerHTML = `<span class="pill">📄 ${file.name} <span class="pill-remove" onclick="clearPdf()">×</span></span>`;
+  document.getElementById('drop-zone').style.display = 'none';
 }
 function clearPdf() {
-  pdfFile=null;
-  document.getElementById('pdf-pill').style.display='none';
-  document.getElementById('drop-zone').style.display='block';
-  document.getElementById('pdf-input').value='';
+  pdfFile = null;
+  document.getElementById('pdf-pill').style.display = 'none';
+  document.getElementById('drop-zone').style.display = 'block';
+  document.getElementById('pdf-input').value = '';
 }
 
-// ─── Generate ────────────────────────────────────────────────────────────────
+// ─── Generate ─────────────────────────────────────────────────────────────────
 let currentJobId = null;
 function startGenerate() {
   const text = document.getElementById('itin-text').value.trim();
   if (!pdfFile && !text) { alert('Please upload a PDF or paste an itinerary.'); return; }
 
   const btn = document.getElementById('generate-btn');
-  btn.disabled = true; btn.textContent = '⏳ Working…';
+  btn.disabled = true;
+  btn.innerHTML = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg> Working…';
 
-  document.getElementById('log-section').style.display='block';
-  document.getElementById('log-box').innerHTML='';
-  document.getElementById('progress-fill').style.width='5%';
+  document.getElementById('log-section').style.display = 'block';
+  document.getElementById('log-box').innerHTML = '<div class="log-waiting" id="log-waiting"><div class="log-spinner"></div><div class="log-waiting-text">Starting up<span class="log-dots"></span></div></div>';
+  document.getElementById('progress-fill').style.width = '4%';
 
   const fd = new FormData();
   if (pdfFile) fd.append('pdf', pdfFile);
   if (text)    fd.append('text', text);
-  fd.append('color',    document.getElementById('color-hex').value);
-  fd.append('lang',     document.getElementById('lang-select').value);
-  fd.append('voice',    document.getElementById('voice-select').value);
-  fd.append('no_audio', document.getElementById('no-audio').checked ? '1' : '0');
+  fd.append('color',       document.getElementById('color-hex').value);
+  fd.append('lang',        document.getElementById('lang-select').value);
+  fd.append('voice',       document.getElementById('voice-select').value);
+  fd.append('no_audio',    document.getElementById('no-audio').checked ? '1' : '0');
+  fd.append('trip_name',   document.getElementById('trip-name').value.trim());
+  fd.append('client_name', document.getElementById('client-name').value.trim());
+  fd.append('agency_name', document.getElementById('agency-name').value.trim());
+  fd.append('logo_url',    document.getElementById('logo-url').value.trim());
 
   fetch('/api/generate', { method:'POST', body:fd })
     .then(r=>r.json())
     .then(d => { currentJobId = d.job_id; pollLog(d.job_id); })
-    .catch(e => { appendLog('error', '❌ '+e); btn.disabled=false; btn.textContent='✨ Generate Demo'; });
+    .catch(e => { appendLog('error', '❌ '+e); btn.disabled=false; btn.innerHTML='<svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1v14M1 8h14"/></svg> Generate Trip'; });
 }
 
 function appendLog(type, text) {
   const box = document.getElementById('log-box');
+  // Hide waiting indicator on first real line
+  const waiting = document.getElementById('log-waiting');
+  if (waiting) waiting.remove();
   const line = document.createElement('span');
   line.className = 'log-line' + (type==='ok'?' log-ok':type==='error'?' log-err':type==='info'?' log-info':'');
   line.textContent = text;
@@ -312,18 +736,19 @@ function pollLog(jobId) {
   let progress = 5;
   es.onmessage = e => {
     const msg = e.data;
+    const RESET_BTN = '<svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1v14M1 8h14"/></svg> Generate Trip';
     if (msg === '__DONE__') {
       es.close();
       document.getElementById('progress-fill').style.width='100%';
       document.getElementById('generate-btn').disabled=false;
-      document.getElementById('generate-btn').textContent='✨ Generate Demo';
+      document.getElementById('generate-btn').innerHTML=RESET_BTN;
       loadBuilds();
       return;
     }
     if (msg === '__ERROR__') {
       es.close();
       document.getElementById('generate-btn').disabled=false;
-      document.getElementById('generate-btn').textContent='✨ Generate Demo';
+      document.getElementById('generate-btn').innerHTML=RESET_BTN;
       return;
     }
     const type = msg.startsWith('✅')||msg.startsWith('✓') ? 'ok' : msg.startsWith('❌')||msg.startsWith('⚠️') ? 'error' : msg.startsWith('🤖')||msg.startsWith('✍️')||msg.startsWith('🎙️') ? 'info' : '';
@@ -334,27 +759,146 @@ function pollLog(jobId) {
   es.onerror = () => { es.close(); };
 }
 
-// ─── Builds list ─────────────────────────────────────────────────────────────
+// ─── Builds list (Gmail/Excel table) ────────────────────────────────────────────
+let allBuilds = [];
+const LANG_FLAGS = {en:'\u{1F1EC}\u{1F1E7}', it:'\u{1F1EE}\u{1F1F9}', fr:'\u{1F1EB}\u{1F1F7}'};
+
 function loadBuilds() {
   fetch('/api/builds').then(r=>r.json()).then(builds => {
-    const el = document.getElementById('builds-list');
-    if (!builds.length) {
-      el.innerHTML='<div class="empty-state"><div class="empty-icon">🗺️</div><p>No demos yet.<br>Upload an itinerary to get started.</p></div>';
-      return;
-    }
-    el.innerHTML = builds.map(b => `
-      <div class="build-card">
-        <div class="build-card-icon">🗺️</div>
-        <div class="build-card-info">
-          <div class="build-card-name">${b.name}</div>
-          <div class="build-card-meta">${b.days} days · ${b.hotels} hotels · ${b.audio} audio · ${b.size}${b.code ? ` · 🔑 <strong style="letter-spacing:2px;color:var(--accent)">${b.code}</strong>` : ''}</div>
-        </div>
-        <div class="build-card-actions">
-          <a class="btn btn-secondary" href="/preview/${b.id}" target="_blank">👁 Preview</a>
-          <a class="btn btn-secondary" href="/download/${b.id}" download>↓ Download</a>
-        </div>
-      </div>`).join('');
+    allBuilds = builds;
+    applyFilters();
   });
+}
+
+function applyFilters() {
+  const q    = (document.getElementById('filter-search').value || '').toLowerCase();
+  const lang = document.getElementById('filter-lang').value;
+  const sort = document.getElementById('filter-sort').value;
+  let list = allBuilds.filter(b => {
+    if (lang && b.lang \!== lang) return false;
+    if (\!q) return true;
+    return [b.name, b.destination, b.client, b.trip_name].some(f => (f||'').toLowerCase().includes(q));
+  });
+  list.sort((a,b) => {
+    if (sort==='date-asc')   return new Date(a.date)-new Date(b.date);
+    if (sort==='name-asc')   return (a.name||'').localeCompare(b.name||'');
+    if (sort==='dest-asc')   return (a.destination||'').localeCompare(b.destination||'');
+    if (sort==='client-asc') return (a.client||'').localeCompare(b.client||'');
+    if (sort==='days-desc')  return (b.days_count||0)-(a.days_count||0);
+    return new Date(b.date)-new Date(a.date);
+  });
+  const el = document.getElementById('builds-list');
+  const cnt = document.getElementById('builds-count');
+  if (\!allBuilds.length) {
+    cnt.textContent='';
+    el.innerHTML='<div class="empty-state"><div class="empty-icon">\uD83D\uDDFA\uFE0F</div><div class="empty-title">No trips yet</div><div class="empty-sub">Upload an itinerary to generate your first trip.</div></div>';
+    return;
+  }
+  cnt.textContent = list.length+' of '+allBuilds.length+' trip'+(allBuilds.length\!==1?'s':'');
+  if (\!list.length) {
+    el.innerHTML='<div class="empty-state"><div class="empty-icon">\uD83D\uDD0D</div><div class="empty-title">No results</div><div class="empty-sub">Try a different search or filter.</div></div>';
+    return;
+  }
+  const dateStr = iso => { try { return iso ? new Date(iso).toLocaleDateString('en-GB',{day:'numeric',month:'short'}) : '\u2014'; } catch { return '\u2014'; } };
+  const svgEdit  = '<svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
+  const svgEye   = '<svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+  const svgDown  = '<svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>';
+  const svgTrash = '<svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>';
+  el.innerHTML =
+    '<div class="trip-table-head">' +
+    '<div class="trip-table-head-cell"></div>' +
+    '<div class="trip-table-head-cell">Trip / Agency</div>' +
+    '<div class="trip-table-head-cell">Client</div>' +
+    '<div class="trip-table-head-cell">Lang</div>' +
+    '<div class="trip-table-head-cell">Date</div>' +
+    '<div class="trip-table-head-cell">Code</div>' +
+    '<div class="trip-table-head-cell"></div></div>' +
+    list.map(b =>
+      '<div class="trip-row">' +
+      '<div class="trip-row-cb"><input type="checkbox"></div>' +
+      '<div class="trip-col"><div class="trip-col-name">'+( b.destination || b.name )+'</div>' +
+      '<div class="trip-col-sub">'+b.name+' · '+b.days+' days · '+b.hotels+' hotels · '+b.size+'</div></div>' +
+      '<div class="trip-col"><div class="trip-col-client">'+(b.client||'—')+'</div></div>' +
+      '<div class="trip-col"><span class="lang-chip">'+( (b.lang==='en'?'\uD83C\uDDEC\uD83C\uDDE7':b.lang==='it'?'\uD83C\uDDEE\uD83C\uDDF9':b.lang==='fr'?'\uD83C\uDDEB\uD83C\uDDF7':'')+' '+(b.lang||'').toUpperCase() )+'</span></div>' +
+      '<div class="trip-col trip-col-date">'+dateStr(b.date)+'</div>' +
+      '<div class="trip-col"><span class="code-badge" id="code-badge-'+b.id+'" onclick="editCode(\''+b.id+'\')">' +
+      '\uD83D\uDD11 '+(b.code||'+ code')+'</span></div>' +
+      '<div class="trip-col"></div>' +
+      '<div class="row-actions">' +
+      '<button class="row-action-btn" onclick="editBuild(\''+b.id+'\')" title="Edit">'+svgEdit+'</button>' +
+      '<a class="row-action-btn" href="/preview/'+b.id+'" target="_blank" title="Preview">'+svgEye+'</a>' +
+      '<a class="row-action-btn" href="/download/'+b.id+'" download title="Download">'+svgDown+'</a>' +
+      '<button class="row-action-btn danger" onclick="deleteBuild(\''+b.id+'\',\''+b.name+'\')" title="Delete">'+svgTrash+'</button>' +
+      '</div></div>'
+    ).join('');
+}
+
+
+// ─── Access code editor ───────────────────────────────────────────────────────
+function editCode(id) {
+  const badge = document.getElementById('code-badge-' + id);
+  const current = badge.textContent.replace('🔑','').trim();
+  const input = prompt('Access code (4–6 letters/numbers):', current === '+ Add code' ? '' : current);
+  if (input === null) return;
+  const code = input.trim().toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,6);
+  if (!code || code.length < 4) { alert('Code must be 4–6 characters (letters and numbers only).'); return; }
+  fetch(`/api/build/${id}/code`, {
+    method: 'PUT',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({code})
+  }).then(r=>r.json()).then(d => {
+    if (d.error) { alert(d.error); return; }
+    badge.textContent = '🔑 ' + d.code;
+  }).catch(() => alert('Failed to update code.'));
+}
+
+// ─── Delete build ─────────────────────────────────────────────────────────────
+function deleteBuild(id, name) {
+  if (!confirm(`Delete "${name}"?\n\nThis cannot be undone.`)) return;
+  fetch(`/api/build/${id}`, { method: 'DELETE' })
+    .then(r => r.json())
+    .then(() => loadBuilds())
+    .catch(() => alert('Delete failed.'));
+}
+
+// ─── Edit mode ────────────────────────────────────────────────────────────────
+let editingBuildId = null;
+
+function editBuild(id) {
+  fetch(`/api/build/${id}/meta`)
+    .then(r => r.json())
+    .then(meta => {
+      if (meta.error) { alert('No saved settings for this trip — regenerate it first.'); return; }
+      editingBuildId = id;
+
+      // Populate form
+      if (meta.color) { syncColor(meta.color); document.getElementById('color-picker').value = meta.color; }
+      document.getElementById('lang-select').value  = meta.lang  || 'en';
+      document.getElementById('voice-select').value = meta.voice || '';
+      document.getElementById('trip-name').value    = meta.trip_name   || '';
+      document.getElementById('client-name').value  = meta.client_name || '';
+      document.getElementById('agency-name').value  = meta.agency_name || '';
+      document.getElementById('logo-url').value     = meta.logo_url    || '';
+      if (meta.source_text) {
+        document.getElementById('itin-text').value = meta.source_text;
+        clearPdf();
+      }
+
+      // Show banner
+      document.getElementById('edit-banner').style.display = 'block';
+      document.getElementById('edit-banner-name').textContent = `Changes will regenerate this trip`;
+
+      // Scroll sidebar to top
+      document.querySelector('.sidebar').scrollTo({ top: 0, behavior: 'smooth' });
+    })
+    .catch(() => alert('Could not load trip settings.'));
+}
+
+function clearEdit() {
+  editingBuildId = null;
+  document.getElementById('edit-banner').style.display = 'none';
+  document.getElementById('itin-text').value = '';
+  clearPdf();
 }
 
 loadBuilds();
@@ -365,6 +909,7 @@ setInterval(loadBuilds, 10000);
 
 # ─── Flask routes ────────────────────────────────────────────────────────────
 @app.route("/api/generate", methods=["POST"])
+@require_admin
 def generate():
     job_id = str(uuid.uuid4())[:8]
     jobs[job_id] = {"status": "running", "log": [], "output_dir": None}
@@ -372,16 +917,29 @@ def generate():
     # Save uploaded PDF or text
     pdf_file = request.files.get("pdf")
     text     = request.form.get("text", "").strip()
-    color    = request.form.get("color", "")
-    lang     = request.form.get("lang", "")
-    voice    = request.form.get("voice", "")
-    no_audio = request.form.get("no_audio", "0") == "1"
+    color       = request.form.get("color", "")
+    lang        = request.form.get("lang", "")
+    voice       = request.form.get("voice", "")
+    no_audio    = request.form.get("no_audio", "0") == "1"
+    trip_name   = request.form.get("trip_name", "").strip()
+    client_name = request.form.get("client_name", "").strip()
+    agency_name = request.form.get("agency_name", "").strip()
+    logo_url    = request.form.get("logo_url", "").strip()
 
     # Write itinerary to temp file
     import tempfile
+    source_text_for_meta = text  # will be updated after PDF extraction if needed
     if pdf_file and pdf_file.filename:
         tmp_pdf = Path(tempfile.mktemp(suffix=".pdf"))
         pdf_file.save(str(tmp_pdf))
+        # Extract text now so we can save it in meta.json for re-editing
+        try:
+            import fitz
+            doc = fitz.open(str(tmp_pdf))
+            source_text_for_meta = "\n\n".join(p.get_text("text") for p in doc if p.get_text("text").strip())
+            doc.close()
+        except Exception:
+            source_text_for_meta = ""
         entry_script = BASE_DIR / "import-pdf.py"
         itin_arg = str(tmp_pdf)
         is_pdf = True
@@ -402,10 +960,14 @@ def generate():
             cmd = [sys.executable, str(entry_script), itin_arg]
         else:
             cmd = [sys.executable, str(entry_script), "--itinerary", itin_arg]
-        if color:    cmd += ["--color", color]
-        if lang:     cmd += ["--lang", lang]
-        if voice:    cmd += ["--voice", voice]
-        if no_audio: cmd += ["--no-audio"]
+        if color:       cmd += ["--color",       color]
+        if lang:        cmd += ["--lang",        lang]
+        if voice:       cmd += ["--voice",       voice]
+        if no_audio:    cmd += ["--no-audio"]
+        if trip_name:   cmd += ["--trip-name",   trip_name]
+        if client_name: cmd += ["--client-name", client_name]
+        if agency_name: cmd += ["--agency-name", agency_name]
+        if logo_url:    cmd += ["--logo",        logo_url]
 
         env = os.environ.copy()
         env["PYTHONWARNINGS"] = "ignore"
@@ -433,6 +995,16 @@ def generate():
                 shutil.move(str(output_dir), str(dest))
             jobs[job_id]["output_dir"] = str(dest)
             jobs[job_id]["status"] = "done"
+            # Save build metadata for edit-and-regenerate
+            try:
+                meta = {
+                    "color": color, "lang": lang, "voice": voice,
+                    "trip_name": trip_name, "client_name": client_name,
+                    "agency_name": agency_name, "logo_url": logo_url,
+                    "source_text": source_text_for_meta,
+                }
+                (dest / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2))
+            except Exception: pass
             # Auto-generate access code
             try:
                 html_path = dest / "index.html"
@@ -457,18 +1029,28 @@ def generate():
 def log_stream(job_id):
     def stream():
         seen = 0
-        for _ in range(600):  # max ~5 min
+        heartbeat = 0
+        for _ in range(1200):  # max ~10 min
             log = jobs.get(job_id, {}).get("log", [])
             while seen < len(log):
                 line = log[seen]; seen += 1
                 yield f"data: {line}\n\n"
                 if line in ("__DONE__", "__ERROR__"):
                     return
+                heartbeat = 0
+            heartbeat += 1
+            if heartbeat % 4 == 0:  # every 2s send a keepalive comment
+                yield ": keep-alive\n\n"
             time.sleep(0.5)
     return Response(stream(), mimetype="text/event-stream",
-                    headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+                    headers={
+                        "Cache-Control": "no-cache, no-transform",
+                        "X-Accel-Buffering": "no",
+                        "Connection": "keep-alive",
+                    })
 
 @app.route("/api/builds")
+@require_admin
 def list_builds():
     result = []
     for d in sorted(BUILDS_DIR.iterdir(), key=lambda x: x.stat().st_mtime, reverse=True):
@@ -495,10 +1077,70 @@ def list_builds():
         # look up code
         all_codes = load_codes()
         code = next((k for k,v in all_codes.items() if v == d.name), None)
-        result.append({"id": d.name, "name": name, "days": days,
-                        "hotels": hotels, "audio": audio,
-                        "size": f"{size_kb} KB", "code": code})
+        # Read saved meta for filter fields
+        meta = {}
+        meta_file = d / "meta.json"
+        if meta_file.exists():
+            try: meta = json.loads(meta_file.read_text())
+            except: pass
+        # Extract destination from HTML title
+        mt = re.search(r'<title>([^<]+)</title>', content)
+        destination = mt.group(1).strip() if mt else ""
+        # mtime as ISO date string
+        mtime = d.stat().st_mtime
+        import datetime
+        date_str = datetime.datetime.fromtimestamp(mtime).strftime("%Y-%m-%d")
+        result.append({
+            "id": d.name, "name": name, "days": days, "days_count": days,
+            "hotels": hotels, "audio": audio,
+            "size": f"{size_kb} KB", "code": code,
+            "destination": destination,
+            "client": meta.get("client_name", ""),
+            "lang": meta.get("lang", ""),
+            "trip_name": meta.get("trip_name", ""),
+            "date": date_str,
+        })
     return jsonify(result)
+
+@app.route("/api/build/<build_id>", methods=["DELETE"])
+@require_admin
+def delete_build(build_id):
+    build_dir = BUILDS_DIR / build_id
+    if not build_dir.exists():
+        return jsonify({"error": "not found"}), 404
+    shutil.rmtree(str(build_dir))
+    # Remove code mapping
+    codes = load_codes()
+    codes = {k: v for k, v in codes.items() if v != build_id}
+    save_codes(codes)
+    return jsonify({"ok": True})
+
+@app.route("/api/build/<build_id>/code", methods=["PUT"])
+@require_admin
+def set_code(build_id):
+    data = request.get_json(force=True)
+    new_code = (data.get("code") or "").strip().upper()[:6]
+    if not new_code or len(new_code) < 4:
+        return jsonify({"error": "Code must be 4-6 characters"}), 400
+    import re as _re
+    if not _re.match(r'^[A-Z0-9]+$', new_code):
+        return jsonify({"error": "Only letters and numbers allowed"}), 400
+    codes = load_codes()
+    if new_code in codes and codes[new_code] != build_id:
+        return jsonify({"error": "Code already in use"}), 409
+    # Remove old code for this build
+    codes = {k: v for k, v in codes.items() if v != build_id}
+    codes[new_code] = build_id
+    save_codes(codes)
+    return jsonify({"code": new_code})
+
+@app.route("/api/build/<build_id>/meta")
+@require_admin
+def build_meta(build_id):
+    meta_file = BUILDS_DIR / build_id / "meta.json"
+    if not meta_file.exists():
+        return jsonify({"error": "no meta"}), 404
+    return jsonify(json.loads(meta_file.read_text()))
 
 @app.route("/preview/<build_id>")
 def preview(build_id):
@@ -832,6 +1474,7 @@ def enter_code():
     return jsonify({"url": f"/preview/{build_id}"})
 
 @app.route("/admin")
+@require_admin
 def admin():
     """Admin dashboard — internal use only."""
     return render_template_string(DASHBOARD_HTML)
