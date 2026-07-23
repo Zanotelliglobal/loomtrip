@@ -473,22 +473,29 @@ label {
 <aside class="sidebar">
   <div class="sidebar-header">
     <div class="wordmark">Loomtrip</div>
-    <div class="wordmark-sub">Trip Studio</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;">
+      <div class="wordmark-sub" data-i18n="studio">Trip Studio</div>
+      <div id="admin-lang-switcher" style="display:flex;gap:2px;background:rgba(255,255,255,0.06);border-radius:6px;padding:2px;">
+        <button onclick="setAdminLang('en')" data-al="en" style="font-size:10px;font-weight:700;letter-spacing:0.5px;padding:3px 7px;border:none;border-radius:4px;cursor:pointer;background:transparent;color:rgba(255,255,255,0.4);transition:all 0.15s;font-family:inherit;">EN</button>
+        <button onclick="setAdminLang('it')" data-al="it" style="font-size:10px;font-weight:700;letter-spacing:0.5px;padding:3px 7px;border:none;border-radius:4px;cursor:pointer;background:transparent;color:rgba(255,255,255,0.4);transition:all 0.15s;font-family:inherit;">IT</button>
+        <button onclick="setAdminLang('fr')" data-al="fr" style="font-size:10px;font-weight:700;letter-spacing:0.5px;padding:3px 7px;border:none;border-radius:4px;cursor:pointer;background:transparent;color:rgba(255,255,255,0.4);transition:all 0.15s;font-family:inherit;">FR</button>
+      </div>
+    </div>
   </div>
 
   <div id="edit-banner" style="display:none;padding:10px 28px;background:rgba(196,135,58,0.12);border-bottom:1px solid rgba(196,135,58,0.2);">
-    <div style="font-size:11px;color:var(--accent);font-weight:600;letter-spacing:0.5px;margin-bottom:4px;">EDITING TRIP</div>
+    <div style="font-size:11px;color:var(--accent);font-weight:600;letter-spacing:0.5px;margin-bottom:4px;" data-i18n="editing_trip">EDITING TRIP</div>
     <div style="font-size:12px;color:var(--sidebar-muted);margin-bottom:8px;" id="edit-banner-name"></div>
-    <button onclick="clearEdit()" style="font-size:11px;color:var(--sidebar-muted);background:none;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:4px 10px;cursor:pointer;font-family:var(--sans);">✕ New trip instead</button>
+    <button onclick="clearEdit()" style="font-size:11px;color:var(--sidebar-muted);background:none;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:4px 10px;cursor:pointer;font-family:var(--sans);" data-i18n="new_trip_instead">✕ New trip instead</button>
   </div>
 
   <div class="sidebar-body">
 
     <div class="section">
-      <label>Itinerary PDF</label>
+      <label data-i18n="lbl_pdf">Itinerary PDF</label>
       <div class="drop-zone" id="drop-zone" onclick="document.getElementById('pdf-input').click()">
         <div class="drop-zone-icon">📄</div>
-        <div class="drop-zone-text">Drop PDF here or <strong>browse</strong></div>
+        <div class="drop-zone-text" data-i18n="drop_pdf">Drop PDF here or <strong>browse</strong></div>
       </div>
       <input type="file" id="pdf-input" accept=".pdf" onchange="handleFile(this.files[0])">
       <div id="pdf-pill" style="display:none;margin-top:6px;"></div>
@@ -496,17 +503,17 @@ label {
 
     <div class="divider">
       <div class="divider-line"></div>
-      <div class="divider-text">or paste text</div>
+      <div class="divider-text" data-i18n="or_paste">or paste text</div>
       <div class="divider-line"></div>
     </div>
 
     <div class="section">
-      <label>Itinerary Text</label>
-      <textarea id="itin-text" placeholder="Paste the DMC's itinerary here…"></textarea>
+      <label data-i18n="lbl_text">Itinerary Text</label>
+      <textarea id="itin-text" data-i18n-placeholder="placeholder_text" placeholder="Paste the DMC's itinerary here…"></textarea>
     </div>
 
     <div class="section">
-      <label>Brand Colour</label>
+      <label data-i18n="lbl_color">Brand Colour</label>
       <div class="color-row">
         <input type="color" id="color-picker" value="#C4873A" oninput="syncColor(this.value)">
         <input type="text" id="color-hex" value="#C4873A" placeholder="#C4873A" oninput="syncColorFromText(this.value)" maxlength="7">
@@ -515,39 +522,39 @@ label {
     </div>
 
     <div class="section">
-      <label>Trip Name</label>
-      <input type="text" id="trip-name" placeholder="e.g. Georgia: Caucasus Highlights">
+      <label data-i18n="lbl_trip_name">Trip Name</label>
+      <input type="text" id="trip-name" data-i18n-placeholder="placeholder_trip_name" placeholder="e.g. Georgia: Caucasus Highlights">
     </div>
 
     <div class="section">
-      <label>Client Name</label>
-      <input type="text" id="client-name" placeholder="e.g. The Zanotelli Family">
+      <label data-i18n="lbl_client">Client Name</label>
+      <input type="text" id="client-name" data-i18n-placeholder="placeholder_client" placeholder="e.g. The Zanotelli Family">
     </div>
 
     <div class="section">
-      <label>Agency / DMC Name</label>
-      <input type="text" id="agency-name" placeholder="Leave blank to auto-detect from PDF">
+      <label data-i18n="lbl_agency">Agency / DMC Name</label>
+      <input type="text" id="agency-name" data-i18n-placeholder="placeholder_agency" placeholder="Leave blank to auto-detect from PDF">
     </div>
 
     <div class="section">
-      <label>Agency Logo URL</label>
+      <label data-i18n="lbl_logo">Agency Logo URL</label>
       <input type="text" id="logo-url" placeholder="https://…/logo.png">
     </div>
 
     <div class="section">
-      <label>Language</label>
+      <label data-i18n="lbl_lang">Language</label>
       <select id="lang-select">
-        <option value="en" selected>English</option>
-        <option value="it">Italian</option>
-        <option value="fr">French</option>
-        <option value="">Auto-detect from PDF</option>
+        <option value="en" selected data-i18n="lang_en">English</option>
+        <option value="it" data-i18n="lang_it">Italian</option>
+        <option value="fr" data-i18n="lang_fr">French</option>
+        <option value="" data-i18n="lang_auto">Auto-detect from PDF</option>
       </select>
     </div>
 
     <div class="section">
-      <label>Voice</label>
+      <label data-i18n="lbl_voice">Voice</label>
       <select id="voice-select">
-        <option value="">Auto (matches language)</option>
+        <option value="" data-i18n="voice_auto">Auto (matches language)</option>
         <option value="en-US-AriaNeural">English — Aria (female, warm)</option>
         <option value="en-US-GuyNeural">English — Guy (male)</option>
         <option value="it-IT-DiegoNeural">Italian — Diego (male)</option>
@@ -559,7 +566,7 @@ label {
     <div class="section">
       <input type="checkbox" id="no-audio">
       <div class="toggle-row" onclick="toggleAudio()">
-        <span class="toggle-row-label">Skip audio <span style="color:var(--sidebar-muted);font-size:12px;">(faster)</span></span>
+        <span class="toggle-row-label" data-i18n="skip_audio">Skip audio</span> <span style="color:var(--sidebar-muted);font-size:12px;" data-i18n="skip_audio_hint">(faster)</span>
         <div class="toggle" id="toggle-audio"></div>
       </div>
     </div>
@@ -569,7 +576,7 @@ label {
   <div class="sidebar-footer">
     <button class="btn-generate" id="generate-btn" onclick="startGenerate()">
       <svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1v14M1 8h14"/></svg>
-      Generate Trip
+      <span data-i18n="btn_generate">Generate Trip</span>
     </button>
   </div>
 </aside>
@@ -592,36 +599,36 @@ label {
 
   <div id="builds-section">
     <div class="page-header">
-      <div class="page-title">Your Trips</div>
+      <div class="page-title" data-i18n="page_title">Your Trips</div>
       <div class="page-count" id="builds-count"></div>
     </div>
 
     <div class="filter-toolbar">
       <div class="filter-search-wrap">
         <svg class="filter-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-        <input class="filter-search" id="filter-search" type="text" placeholder="Search trips, clients, destinations…" oninput="applyFilters()">
+        <input class="filter-search" id="filter-search" type="text" data-i18n-placeholder="search_placeholder" placeholder="Search trips, clients, destinations…" oninput="applyFilters()">
       </div>
       <select class="filter-select" id="filter-lang" onchange="applyFilters()">
-        <option value="">All languages</option>
+        <option value="" data-i18n="all_langs">All languages</option>
         <option value="en">🇬🇧 English</option>
         <option value="it">🇮🇹 Italian</option>
         <option value="fr">🇫🇷 French</option>
       </select>
       <select class="filter-select" id="filter-sort" onchange="applyFilters()">
-        <option value="date-desc">↓ Newest</option>
-        <option value="date-asc">↑ Oldest</option>
-        <option value="name-asc">A→Z Agency</option>
-        <option value="dest-asc">A→Z Destination</option>
-        <option value="client-asc">A→Z Client</option>
-        <option value="days-desc">Most days</option>
+        <option value="date-desc" data-i18n="sort_newest">↓ Newest</option>
+        <option value="date-asc" data-i18n="sort_oldest">↑ Oldest</option>
+        <option value="name-asc" data-i18n="sort_agency">A→Z Agency</option>
+        <option value="dest-asc" data-i18n="sort_dest">A→Z Destination</option>
+        <option value="client-asc" data-i18n="sort_client">A→Z Client</option>
+        <option value="days-desc" data-i18n="sort_days">Most days</option>
       </select>
     </div>
 
     <div id="builds-list">
       <div class="empty-state">
         <div class="empty-icon">🗺️</div>
-        <div class="empty-title">No trips yet</div>
-        <div class="empty-sub">Upload an itinerary to generate your first trip.</div>
+        <div class="empty-title" data-i18n="empty_title">No trips yet</div>
+        <div class="empty-sub" data-i18n="empty_sub">Upload an itinerary to generate your first trip.</div>
       </div>
     </div>
   </div>
@@ -629,6 +636,103 @@ label {
 </main>
 
 <script>
+// ─── Admin i18n ───────────────────────────────────────────────────────────────
+const ADMIN_I18N = {
+  en: {
+    studio:'Trip Studio', editing_trip:'EDITING TRIP', new_trip_instead:'✕ New trip instead',
+    lbl_pdf:'Itinerary PDF', drop_pdf:'Drop PDF here or <strong>browse</strong>', or_paste:'or paste text',
+    lbl_text:'Itinerary Text', placeholder_text:'Paste the DMC\'s itinerary here…',
+    lbl_color:'Brand Colour', lbl_trip_name:'Trip Name', placeholder_trip_name:'e.g. Georgia: Caucasus Highlights',
+    lbl_client:'Client Name', placeholder_client:'e.g. The Zanotelli Family',
+    lbl_agency:'Agency / DMC Name', placeholder_agency:'Leave blank to auto-detect from PDF',
+    lbl_logo:'Agency Logo URL', lbl_lang:'Language', lbl_voice:'Voice',
+    lang_en:'English', lang_it:'Italian', lang_fr:'French', lang_auto:'Auto-detect from PDF',
+    voice_auto:'Auto (matches language)',
+    skip_audio:'Skip audio', skip_audio_hint:'(faster)',
+    btn_generate:'Generate Trip',
+    page_title:'Your Trips',
+    search_placeholder:'Search trips, clients, destinations…',
+    all_langs:'All languages',
+    sort_newest:'↓ Newest', sort_oldest:'↑ Oldest', sort_agency:'A→Z Agency',
+    sort_dest:'A→Z Destination', sort_client:'A→Z Client', sort_days:'Most days',
+    empty_title:'No trips yet', empty_sub:'Upload an itinerary to generate your first trip.',
+    col_trip:'Trip / Agency', col_client:'Client', col_lang:'Lang', col_date:'Date', col_code:'Code',
+    days_label:'days', hotels_label:'hotels',
+  },
+  it: {
+    studio:'Trip Studio', editing_trip:'MODIFICA VIAGGIO', new_trip_instead:'✕ Nuovo viaggio',
+    lbl_pdf:'PDF Itinerario', drop_pdf:'Trascina il PDF qui o <strong>sfoglia</strong>', or_paste:'o incolla il testo',
+    lbl_text:'Testo Itinerario', placeholder_text:'Incolla qui l\'itinerario del DMC…',
+    lbl_color:'Colore Brand', lbl_trip_name:'Nome Viaggio', placeholder_trip_name:'es. Georgia: Highlights del Caucaso',
+    lbl_client:'Nome Cliente', placeholder_client:'es. Famiglia Zanotelli',
+    lbl_agency:'Nome Agenzia / DMC', placeholder_agency:'Lascia vuoto per rilevamento automatico',
+    lbl_logo:'URL Logo Agenzia', lbl_lang:'Lingua', lbl_voice:'Voce',
+    lang_en:'Inglese', lang_it:'Italiano', lang_fr:'Francese', lang_auto:'Rileva automaticamente',
+    voice_auto:'Auto (segue la lingua)',
+    skip_audio:'Salta audio', skip_audio_hint:'(più veloce)',
+    btn_generate:'Genera Viaggio',
+    page_title:'I Tuoi Viaggi',
+    search_placeholder:'Cerca viaggi, clienti, destinazioni…',
+    all_langs:'Tutte le lingue',
+    sort_newest:'↓ Più recenti', sort_oldest:'↑ Meno recenti', sort_agency:'A→Z Agenzia',
+    sort_dest:'A→Z Destinazione', sort_client:'A→Z Cliente', sort_days:'Più giorni',
+    empty_title:'Nessun viaggio', empty_sub:'Carica un itinerario per generare il tuo primo viaggio.',
+    col_trip:'Viaggio / Agenzia', col_client:'Cliente', col_lang:'Lingua', col_date:'Data', col_code:'Codice',
+    days_label:'giorni', hotels_label:'hotel',
+  },
+  fr: {
+    studio:'Trip Studio', editing_trip:'MODIFIER LE VOYAGE', new_trip_instead:'✕ Nouveau voyage',
+    lbl_pdf:'PDF Itinéraire', drop_pdf:'Déposez le PDF ici ou <strong>parcourir</strong>', or_paste:'ou coller le texte',
+    lbl_text:'Texte Itinéraire', placeholder_text:'Collez ici l\'itinéraire du DMC…',
+    lbl_color:'Couleur Marque', lbl_trip_name:'Nom du Voyage', placeholder_trip_name:'ex. Géorgie: Highlights du Caucase',
+    lbl_client:'Nom du Client', placeholder_client:'ex. Famille Zanotelli',
+    lbl_agency:'Nom Agence / DMC', placeholder_agency:'Laisser vide pour détection automatique',
+    lbl_logo:'URL Logo Agence', lbl_lang:'Langue', lbl_voice:'Voix',
+    lang_en:'Anglais', lang_it:'Italien', lang_fr:'Français', lang_auto:'Détection automatique',
+    voice_auto:'Auto (suit la langue)',
+    skip_audio:'Ignorer audio', skip_audio_hint:'(plus rapide)',
+    btn_generate:'Générer le Voyage',
+    page_title:'Vos Voyages',
+    search_placeholder:'Rechercher voyages, clients, destinations…',
+    all_langs:'Toutes les langues',
+    sort_newest:'↓ Plus récents', sort_oldest:'↑ Plus anciens', sort_agency:'A→Z Agence',
+    sort_dest:'A→Z Destination', sort_client:'A→Z Client', sort_days:'Plus de jours',
+    empty_title:'Aucun voyage', empty_sub:'Chargez un itinéraire pour générer votre premier voyage.',
+    col_trip:'Voyage / Agence', col_client:'Client', col_lang:'Langue', col_date:'Date', col_code:'Code',
+    days_label:'jours', hotels_label:'hôtels',
+  }
+};
+
+let adminLang = localStorage.getItem('loomtrip_admin_lang') || 'en';
+
+function setAdminLang(l) {
+  adminLang = l;
+  localStorage.setItem('loomtrip_admin_lang', l);
+  applyAdminLang();
+}
+
+function applyAdminLang() {
+  const d = ADMIN_I18N[adminLang] || ADMIN_I18N.en;
+  // Update text content
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const key = el.getAttribute('data-i18n');
+    if (d[key] !== undefined) el.innerHTML = d[key];
+  });
+  // Update placeholders
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+    const key = el.getAttribute('data-i18n-placeholder');
+    if (d[key] !== undefined) el.placeholder = d[key];
+  });
+  // Highlight active lang button
+  document.querySelectorAll('#admin-lang-switcher button').forEach(btn => {
+    const active = btn.getAttribute('data-al') === adminLang;
+    btn.style.background = active ? 'rgba(196,135,58,0.8)' : 'transparent';
+    btn.style.color = active ? '#fff' : 'rgba(255,255,255,0.4)';
+  });
+  // Re-render table with new labels if data loaded
+  if (allBuilds.length) applyFilters();
+}
+
 // ─── Toggle ───────────────────────────────────────────────────────────────────
 function toggleAudio() {
   const cb = document.getElementById('no-audio');
@@ -791,7 +895,8 @@ function applyFilters() {
   const cnt = document.getElementById('builds-count');
   if (!allBuilds.length) {
     cnt.textContent='';
-    el.innerHTML='<div class="empty-state"><div class="empty-icon">\uD83D\uDDFA\uFE0F</div><div class="empty-title">No trips yet</div><div class="empty-sub">Upload an itinerary to generate your first trip.</div></div>';
+    const d2=ADMIN_I18N[adminLang]||ADMIN_I18N.en;
+    el.innerHTML='<div class="empty-state"><div class="empty-icon">\uD83D\uDDFA\uFE0F</div><div class="empty-title">'+d2.empty_title+'</div><div class="empty-sub">'+d2.empty_sub+'</div></div>';
     return;
   }
   cnt.textContent = list.length+' of '+allBuilds.length+' trip'+(allBuilds.length!==1?'s':'');
@@ -807,17 +912,17 @@ function applyFilters() {
   el.innerHTML =
     '<div class="trip-table-head">' +
     '<div class="trip-table-head-cell"></div>' +
-    '<div class="trip-table-head-cell">Trip / Agency</div>' +
-    '<div class="trip-table-head-cell">Client</div>' +
-    '<div class="trip-table-head-cell">Lang</div>' +
-    '<div class="trip-table-head-cell">Date</div>' +
-    '<div class="trip-table-head-cell">Code</div>' +
+    '<div class="trip-table-head-cell">'+((ADMIN_I18N[adminLang]||ADMIN_I18N.en).col_trip)+'</div>' +
+    '<div class="trip-table-head-cell">'+((ADMIN_I18N[adminLang]||ADMIN_I18N.en).col_client)+'</div>' +
+    '<div class="trip-table-head-cell">'+((ADMIN_I18N[adminLang]||ADMIN_I18N.en).col_lang)+'</div>' +
+    '<div class="trip-table-head-cell">'+((ADMIN_I18N[adminLang]||ADMIN_I18N.en).col_date)+'</div>' +
+    '<div class="trip-table-head-cell">'+((ADMIN_I18N[adminLang]||ADMIN_I18N.en).col_code)+'</div>' +
     '<div class="trip-table-head-cell"></div></div>' +
     list.map(b =>
       '<div class="trip-row">' +
       '<div class="trip-row-cb"><input type="checkbox"></div>' +
       '<div class="trip-col"><div class="trip-col-name">'+( b.destination || b.name )+'</div>' +
-      '<div class="trip-col-sub">'+b.name+' · '+b.days+' days · '+b.hotels+' hotels · '+b.size+'</div></div>' +
+      '<div class="trip-col-sub">'+b.name+' · '+b.days+' '+((ADMIN_I18N[adminLang]||ADMIN_I18N.en).days_label)+' · '+b.hotels+' '+((ADMIN_I18N[adminLang]||ADMIN_I18N.en).hotels_label)+' · '+b.size+'</div></div>' +
       '<div class="trip-col"><div class="trip-col-client">'+(b.client||'—')+'</div></div>' +
       '<div class="trip-col"><span class="lang-chip">'+( (b.lang==='en'?'\uD83C\uDDEC\uD83C\uDDE7':b.lang==='it'?'\uD83C\uDDEE\uD83C\uDDF9':b.lang==='fr'?'\uD83C\uDDEB\uD83C\uDDF7':'')+' '+(b.lang||'').toUpperCase() )+'</span></div>' +
       '<div class="trip-col trip-col-date">'+dateStr(b.date)+'</div>' +
@@ -901,6 +1006,7 @@ function clearEdit() {
   clearPdf();
 }
 
+applyAdminLang();
 loadBuilds();
 setInterval(loadBuilds, 10000);
 </script>
