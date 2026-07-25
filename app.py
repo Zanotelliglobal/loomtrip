@@ -571,6 +571,40 @@ label {
       </div>
     </div>
 
+    <div class="divider" style="margin-top:8px;">
+      <div class="divider-line"></div>
+      <div class="divider-text" data-i18n="extras_label">Extras</div>
+      <div class="divider-line"></div>
+    </div>
+
+    <div class="section" style="gap:10px;display:flex;flex-direction:column;">
+
+      <div class="toggle-row" onclick="toggleExtra('weather')">
+        <span class="toggle-row-label">🌤️ <span data-i18n="extra_weather">Weather forecast</span></span>
+        <div class="toggle" id="toggle-weather"></div>
+        <input type="checkbox" id="extra-weather" style="display:none">
+      </div>
+
+      <div class="toggle-row" onclick="toggleExtra('descriptions')">
+        <span class="toggle-row-label">📖 <span data-i18n="extra_descriptions">Extended descriptions</span></span>
+        <div class="toggle" id="toggle-descriptions"></div>
+        <input type="checkbox" id="extra-descriptions" style="display:none">
+      </div>
+
+      <div class="toggle-row" onclick="toggleExtra('packing')">
+        <span class="toggle-row-label">🧳 <span data-i18n="extra_packing">Packing list</span></span>
+        <div class="toggle" id="toggle-packing"></div>
+        <input type="checkbox" id="extra-packing" style="display:none">
+      </div>
+
+      <div class="toggle-row" onclick="toggleExtra('vocabulary')">
+        <span class="toggle-row-label">💬 <span data-i18n="extra_vocabulary">Base vocabulary</span></span>
+        <div class="toggle" id="toggle-vocabulary"></div>
+        <input type="checkbox" id="extra-vocabulary" style="display:none">
+      </div>
+
+    </div>
+
   </div>
 
   <div class="sidebar-footer">
@@ -658,6 +692,9 @@ const ADMIN_I18N = {
     empty_title:'No trips yet', empty_sub:'Upload an itinerary to generate your first trip.',
     col_trip:'Trip / Agency', col_client:'Client', col_lang:'Lang', col_date:'Date', col_code:'Code',
     days_label:'days', hotels_label:'hotels',
+    extras_label:'Extras', extra_weather:'Weather forecast',
+    extra_descriptions:'Extended descriptions', extra_packing:'Packing list',
+    extra_vocabulary:'Base vocabulary',
   },
   it: {
     studio:'Trip Studio', editing_trip:'MODIFICA VIAGGIO', new_trip_instead:'✕ Nuovo viaggio',
@@ -679,6 +716,9 @@ const ADMIN_I18N = {
     empty_title:'Nessun viaggio', empty_sub:'Carica un itinerario per generare il tuo primo viaggio.',
     col_trip:'Viaggio / Agenzia', col_client:'Cliente', col_lang:'Lingua', col_date:'Data', col_code:'Codice',
     days_label:'giorni', hotels_label:'hotel',
+    extras_label:'Extra', extra_weather:'Previsioni meteo',
+    extra_descriptions:'Descrizioni estese', extra_packing:'Lista valigia',
+    extra_vocabulary:'Vocabolario base',
   },
   fr: {
     studio:'Trip Studio', editing_trip:'MODIFIER LE VOYAGE', new_trip_instead:'✕ Nouveau voyage',
@@ -700,6 +740,9 @@ const ADMIN_I18N = {
     empty_title:'Aucun voyage', empty_sub:'Chargez un itinéraire pour générer votre premier voyage.',
     col_trip:'Voyage / Agence', col_client:'Client', col_lang:'Langue', col_date:'Date', col_code:'Code',
     days_label:'jours', hotels_label:'hôtels',
+    extras_label:'Extras', extra_weather:'Météo prévisions',
+    extra_descriptions:'Descriptions étendues', extra_packing:'Liste bagages',
+    extra_vocabulary:'Vocabulaire de base',
   }
 };
 
@@ -738,6 +781,11 @@ function toggleAudio() {
   const cb = document.getElementById('no-audio');
   cb.checked = !cb.checked;
   document.getElementById('toggle-audio').classList.toggle('on', cb.checked);
+}
+function toggleExtra(id) {
+  const cb = document.getElementById('extra-' + id);
+  cb.checked = !cb.checked;
+  document.getElementById('toggle-' + id).classList.toggle('on', cb.checked);
 }
 
 // ─── Colour presets ───────────────────────────────────────────────────────────
@@ -815,6 +863,10 @@ function startGenerate() {
   fd.append('client_name', document.getElementById('client-name').value.trim());
   fd.append('agency_name', document.getElementById('agency-name').value.trim());
   fd.append('logo_url',    document.getElementById('logo-url').value.trim());
+  fd.append('extra_weather',      document.getElementById('extra-weather').checked ? '1' : '0');
+  fd.append('extra_descriptions', document.getElementById('extra-descriptions').checked ? '1' : '0');
+  fd.append('extra_packing',      document.getElementById('extra-packing').checked ? '1' : '0');
+  fd.append('extra_vocabulary',   document.getElementById('extra-vocabulary').checked ? '1' : '0');
 
   fetch('/api/generate', { method:'POST', body:fd })
     .then(r=>r.json())
@@ -984,6 +1036,12 @@ function editBuild(id) {
       document.getElementById('client-name').value  = meta.client_name || '';
       document.getElementById('agency-name').value  = meta.agency_name || '';
       document.getElementById('logo-url').value     = meta.logo_url    || '';
+      // Restore extras
+      ['weather','descriptions','packing','vocabulary'].forEach(id => {
+        const on = !!meta['extra_' + id];
+        document.getElementById('extra-' + id).checked = on;
+        document.getElementById('toggle-' + id).classList.toggle('on', on);
+      });
       if (meta.source_text) {
         document.getElementById('itin-text').value = meta.source_text;
         clearPdf();
@@ -1031,6 +1089,10 @@ def generate():
     client_name = request.form.get("client_name", "").strip()
     agency_name = request.form.get("agency_name", "").strip()
     logo_url    = request.form.get("logo_url", "").strip()
+    extra_weather      = request.form.get("extra_weather", "0") == "1"
+    extra_descriptions = request.form.get("extra_descriptions", "0") == "1"
+    extra_packing      = request.form.get("extra_packing", "0") == "1"
+    extra_vocabulary   = request.form.get("extra_vocabulary", "0") == "1"
 
     # Write itinerary to temp file
     import tempfile
@@ -1069,11 +1131,15 @@ def generate():
         if color:       cmd += ["--color",       color]
         if lang:        cmd += ["--lang",        lang]
         if voice:       cmd += ["--voice",       voice]
-        if no_audio:    cmd += ["--no-audio"]
-        if trip_name:   cmd += ["--trip-name",   trip_name]
-        if client_name: cmd += ["--client-name", client_name]
-        if agency_name: cmd += ["--agency-name", agency_name]
-        if logo_url:    cmd += ["--logo",        logo_url]
+        if no_audio:            cmd += ["--no-audio"]
+        if trip_name:           cmd += ["--trip-name",   trip_name]
+        if client_name:         cmd += ["--client-name", client_name]
+        if agency_name:         cmd += ["--agency-name", agency_name]
+        if logo_url:            cmd += ["--logo",        logo_url]
+        if extra_weather:       cmd += ["--extra-weather"]
+        if extra_descriptions:  cmd += ["--extra-descriptions"]
+        if extra_packing:       cmd += ["--extra-packing"]
+        if extra_vocabulary:    cmd += ["--extra-vocabulary"]
 
         env = os.environ.copy()
         env["PYTHONWARNINGS"] = "ignore"
@@ -1108,6 +1174,10 @@ def generate():
                     "trip_name": trip_name, "client_name": client_name,
                     "agency_name": agency_name, "logo_url": logo_url,
                     "source_text": source_text_for_meta,
+                    "extra_weather": extra_weather,
+                    "extra_descriptions": extra_descriptions,
+                    "extra_packing": extra_packing,
+                    "extra_vocabulary": extra_vocabulary,
                 }
                 (dest / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2))
             except Exception: pass

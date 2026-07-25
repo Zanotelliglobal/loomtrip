@@ -49,10 +49,14 @@ parser.add_argument("--lang",        default=None, help="Override language: en |
 parser.add_argument("--voice",       default=None, help="edge-tts voice name")
 parser.add_argument("--rate",        default="-8%", help="Speech rate e.g. -8pct")
 parser.add_argument("--model",       default="claude-haiku-4-5")
-parser.add_argument("--no-audio",    action="store_true", help="Skip audio generation")
-parser.add_argument("--trip-name",   default=None, help="Override trip title")
-parser.add_argument("--client-name", default=None, help="Client/traveler name for personalisation")
-parser.add_argument("--agency-name", default=None, help="Override DMC/agency name")
+parser.add_argument("--no-audio",            action="store_true", help="Skip audio generation")
+parser.add_argument("--trip-name",           default=None, help="Override trip title")
+parser.add_argument("--client-name",         default=None, help="Client/traveler name for personalisation")
+parser.add_argument("--agency-name",         default=None, help="Override DMC/agency name")
+parser.add_argument("--extra-weather",       action="store_true", help="Generate weather forecast tab")
+parser.add_argument("--extra-descriptions",  action="store_true", help="Generate extended day descriptions")
+parser.add_argument("--extra-packing",       action="store_true", help="Generate packing list tab")
+parser.add_argument("--extra-vocabulary",    action="store_true", help="Generate base vocabulary tab")
 args = parser.parse_args()
 
 # ─── read itinerary ──────────────────────────────────────────────────────────
@@ -276,6 +280,152 @@ if audio_chapters and not args.no_audio:
         except Exception as e:
             print(f"   ⚠️  audio-{n:02d}.mp3 FAILED: {type(e).__name__}: {e}")
 
+# ─── STEP 3 — Generate extras via Claude ─────────────────────────────────────
+extras_weather_data      = None
+extras_descriptions_data = None
+extras_packing_data      = None
+extras_vocabulary_data   = None
+
+lang_names = {"en": "English", "it": "Italian", "fr": "French"}
+lang_name_for_extras = lang_names.get(lang, "English")
+trip_summary = f"{destination}, {len(days)} days"
+
+if args.extra_weather:
+    print("🌤️  Generating weather forecast...")
+    WEATHER_PROMPT = f"""You are a luxury travel specialist. Generate a practical weather forecast for a trip to {destination}.
+The trip covers {len(days)} days. Write in {lang_name_for_extras}.
+Return ONLY a JSON object with this structure — no markdown fences:
+{{
+  "summary": "1-sentence overview of weather to expect",
+  "months": "months/season of the trip if known",
+  "daily": [
+    {{"label": "Day 1–3", "icon": "☀️", "temp": "22–28°C", "conditions": "Sunny and warm. Light jacket for evenings."}},
+    {{"label": "Day 4–6", "icon": "⛅", "temp": "18–24°C", "conditions": "Partly cloudy, chance of afternoon showers."}}
+  ],
+  "tips": ["Bring sunscreen", "Pack a light rain layer", "Evenings can be cool"]
+}}
+Use real climate data for {destination}. Days data: {json.dumps([{{'date':d.get('date',''),'title':d.get('title','')} } for d in days[:3]], ensure_ascii=False)}"""
+    try:
+        wr = ai.messages.create(model=args.model, max_tokens=1500,
+            messages=[{"role":"user","content":WEATHER_PROMPT}])
+        raw_w = re.sub(r'^```(?:json)?\s*','', wr.content[0].text.strip())
+        raw_w = re.sub(r'\s*```$','', raw_w)
+        extras_weather_data = json.loads(raw_w)
+        print("   ✅ Weather forecast ready")
+    except Exception as e:
+        print(f"   ⚠️  Weather generation failed: {e}")
+
+if args.extra_descriptions:
+    print("📖 Generating extended descriptions...")
+    DESC_PROMPT = f"""You are a luxury travel writer. For each day of this {destination} trip, write a rich 3–4 sentence narrative description in {lang_name_for_extras}.
+Evoke atmosphere, sensory details, local culture. Return ONLY a JSON array — no markdown:
+[{{"day": 1, "description": "..."}}, ...]
+Days: {json.dumps([{{'day':i+1,'date':d.get('date',''),'title':d.get('title',''),'events':[e.get('title','') for e in d.get('events',[])[:4]]}} for i,d in enumerate(days)], ensure_ascii=False)}"""
+    try:
+        dr = ai.messages.create(model=args.model, max_tokens=3000,
+            messages=[{"role":"user","content":DESC_PROMPT}])
+        raw_d = re.sub(r'^```(?:json)?\s*','', dr.content[0].text.strip())
+        raw_d = re.sub(r'\s*```$','', raw_d)
+        extras_descriptions_data = json.loads(raw_d)
+        # Inject descriptions into days
+        desc_map = {item["day"]: item["description"] for item in extras_descriptions_data if "day" in item}
+        for i, day in enumerate(days):
+            if (i+1) in desc_map:
+                day["extended_description"] = desc_map[i+1]
+        print(f"   ✅ Extended descriptions for {len(extras_descriptions_data)} days")
+    except Exception as e:
+        print(f"   ⚠️  Descriptions generation failed: {e}")
+
+if args.extra_packing:
+    print("🧳 Generating packing list...")
+    PACK_PROMPT = f"""You are a luxury travel specialist. Generate a smart packing list for a {len(days)}-day trip to {destination}.
+Write all text in {lang_name_for_extras}. Return ONLY a JSON object — no markdown:
+{{
+  "intro": "Short 1-sentence packing intro tailored to destination/climate.",
+  "categories": [
+    {{"icon": "👔", "name": "Clothing", "items": ["Light linen shirts", "Smart casual trousers", "..."]}},
+    {{"icon": "🔌", "name": "Tech & Documents", "items": ["Adapter (Type C/F)", "Passport + copies", "..."]}},
+    {{"icon": "💊", "name": "Health & Comfort", "items": ["Sunscreen SPF50+", "Antihistamines", "..."]}},
+    {{"icon": "💼", "name": "Luggage", "items": ["Carry-on (max 10kg)", "Day backpack", "..."]}},
+    {{"icon": "✨", "name": "Luxury Essentials", "items": ["Cashmere travel wrap", "Silk eye mask", "..."]}}
+  ]
+}}
+Tailor specifically to {destination}, {len(days)} days, climate and activities implied by these days: {json.dumps([d.get('title','') for d in days[:5]], ensure_ascii=False)}"""
+    try:
+        pr = ai.messages.create(model=args.model, max_tokens=2000,
+            messages=[{"role":"user","content":PACK_PROMPT}])
+        raw_p = re.sub(r'^```(?:json)?\s*','', pr.content[0].text.strip())
+        raw_p = re.sub(r'\s*```$','', raw_p)
+        extras_packing_data = json.loads(raw_p)
+        print("   ✅ Packing list ready")
+    except Exception as e:
+        print(f"   ⚠️  Packing list generation failed: {e}")
+
+if args.extra_vocabulary:
+    print("💬 Generating base vocabulary...")
+    dest_lang_map = {"it": "Italian", "fr": "French", "de": "German", "es": "Spanish",
+                     "pt": "Portuguese", "el": "Greek", "tr": "Turkish", "ja": "Japanese",
+                     "ko": "Korean", "zh": "Chinese", "ar": "Arabic", "ka": "Georgian",
+                     "ru": "Russian", "pl": "Polish", "nl": "Dutch", "sv": "Swedish"}
+    # Guess local language from destination string
+    local_lang = "the local language"
+    for code, lname in dest_lang_map.items():
+        if any(kw in destination.lower() for kw in [lname.lower(), destination.lower()[:3]]):
+            local_lang = lname; break
+    # Better: use destination keywords
+    dest_lower = destination.lower()
+    if any(k in dest_lower for k in ["italy","tuscany","rome","milan","sicily","amalfi","venice","georgian"]):
+        local_lang = "Italian"
+    elif any(k in dest_lower for k in ["france","paris","provence","bordeaux","normandy"]):
+        local_lang = "French"
+    elif any(k in dest_lower for k in ["spain","madrid","barcelona","seville","andalusia"]):
+        local_lang = "Spanish"
+    elif any(k in dest_lower for k in ["georgia","tbilisi","caucasus"]):
+        local_lang = "Georgian"
+    elif any(k in dest_lower for k in ["greece","athens","crete","santorini","mykonos"]):
+        local_lang = "Greek"
+    elif any(k in dest_lower for k in ["turkey","istanbul","cappadocia","antalya"]):
+        local_lang = "Turkish"
+    elif any(k in dest_lower for k in ["japan","tokyo","kyoto","osaka"]):
+        local_lang = "Japanese"
+    elif any(k in dest_lower for k in ["morocco","marrakech","fez"]):
+        local_lang = "Arabic (Moroccan)"
+    elif any(k in dest_lower for k in ["portugal","lisbon","porto","algarve"]):
+        local_lang = "Portuguese"
+
+    VOCAB_PROMPT = f"""You are a language expert and travel guide. Create a practical base vocabulary for a traveller visiting {destination}.
+The local language is {local_lang}. The traveller's app is in {lang_name_for_extras}.
+Return ONLY a JSON object — no markdown fences:
+{{
+  "local_language": "{local_lang}",
+  "intro": "Short friendly note about the language in 1 sentence, in {lang_name_for_extras}.",
+  "categories": [
+    {{
+      "icon": "🙏",
+      "name": "Essentials",
+      "phrases": [
+        {{"native": "Grazie", "pronunciation": "GRAT-see-eh", "meaning": "Thank you"}},
+        ...
+      ]
+    }},
+    {{"icon": "🍽️", "name": "At the restaurant", "phrases": [...]}},
+    {{"icon": "🛎️", "name": "At the hotel", "phrases": [...]}},
+    {{"icon": "🚕", "name": "Getting around", "phrases": [...]}},
+    {{"icon": "🛍️", "name": "Shopping", "phrases": [...]}},
+    {{"icon": "🆘", "name": "Emergencies", "phrases": [...]}}
+  ]
+}}
+All "meaning" fields must be in {lang_name_for_extras}. Provide 5–7 phrases per category. Pronunciations should be phonetic and intuitive."""
+    try:
+        vr = ai.messages.create(model=args.model, max_tokens=3000,
+            messages=[{"role":"user","content":VOCAB_PROMPT}])
+        raw_v = re.sub(r'^```(?:json)?\s*','', vr.content[0].text.strip())
+        raw_v = re.sub(r'\s*```$','', raw_v)
+        extras_vocabulary_data = json.loads(raw_v)
+        print(f"   ✅ Vocabulary ready ({local_lang})")
+    except Exception as e:
+        print(f"   ⚠️  Vocabulary generation failed: {e}")
+
 # ─── i18n labels ─────────────────────────────────────────────────────────────
 LABELS = {
     "en":{"days":"Days","hotels":"Hotels","audio":"Audio","info":"Info","sos":"SOS",
@@ -286,7 +436,10 @@ LABELS = {
           "tonight":"Tonight","crafted":"Crafted by",
           "flights":"Flights","outbound":"✈️ Outbound","return_f":"🏠 Return",
           "your_team":"Your dedicated team","this_app":"This App",
-          "app_desc":"Your complete trip — programme, hotels, audio guide and emergency contacts."},
+          "app_desc":"Your complete trip — programme, hotels, audio guide and emergency contacts.",
+          "weather":"Weather","packing":"Packing","vocabulary":"Phrases",
+          "weather_tips":"Tips","packing_intro_lbl":"What to pack",
+          "vocab_pronunciation":"Pronunciation","vocab_meaning":"Meaning"},
     "it":{"days":"Giorni","hotels":"Hotel","audio":"Audio","info":"Info","sos":"SOS",
           "itinerary":"Programma","map":"📍 Mappa","call":"📞 Chiama","web":"🌐 Sito",
           "powered":"Powered by Loomtrip","select_ch":"Seleziona un capitolo",
@@ -295,7 +448,10 @@ LABELS = {
           "tonight":"Stanotte","crafted":"A cura di",
           "flights":"Voli","outbound":"✈️ Andata","return_f":"🏠 Ritorno",
           "your_team":"Il vostro team dedicato","this_app":"Questa App",
-          "app_desc":"Il vostro viaggio completo — programma, hotel, audio guida e contatti d'emergenza."},
+          "app_desc":"Il vostro viaggio completo — programma, hotel, audio guida e contatti d'emergenza.",
+          "weather":"Meteo","packing":"Valigia","vocabulary":"Frasi",
+          "weather_tips":"Consigli","packing_intro_lbl":"Cosa portare",
+          "vocab_pronunciation":"Pronuncia","vocab_meaning":"Significato"},
     "fr":{"days":"Jours","hotels":"Hôtels","audio":"Audio","info":"Infos","sos":"SOS",
           "itinerary":"Programme","map":"📍 Carte","call":"📞 Appeler","web":"🌐 Site",
           "powered":"Powered by Loomtrip","select_ch":"Choisissez un chapitre",
@@ -304,16 +460,26 @@ LABELS = {
           "tonight":"Ce soir","crafted":"Créé par",
           "flights":"Vols","outbound":"✈️ Aller","return_f":"🏠 Retour",
           "your_team":"Votre équipe dédiée","this_app":"Cette App",
-          "app_desc":"Votre voyage complet — programme, hôtels, guide audio et contacts d'urgence."},
+          "app_desc":"Votre voyage complet — programme, hôtels, guide audio et contacts d'urgence.",
+          "weather":"Météo","packing":"Bagages","vocabulary":"Phrases",
+          "weather_tips":"Conseils","packing_intro_lbl":"Quoi emporter",
+          "vocab_pronunciation":"Prononciation","vocab_meaning":"Signification"},
 }
 t = LABELS.get(lang, LABELS["en"])
 
 # ─── serialise data ──────────────────────────────────────────────────────────
-hotels_js   = json.dumps(hotels,   ensure_ascii=False, indent=2)
-days_js     = json.dumps(days,     ensure_ascii=False, indent=2)
-contacts_js = json.dumps(contacts, ensure_ascii=False, indent=2)
-flights_js  = json.dumps(flights,  ensure_ascii=False, indent=2)
-n_tabs    = 5 if audio_chapters else 4  # show Audio tab only if audio was generated
+hotels_js      = json.dumps(hotels,   ensure_ascii=False, indent=2)
+days_js        = json.dumps(days,     ensure_ascii=False, indent=2)
+contacts_js    = json.dumps(contacts, ensure_ascii=False, indent=2)
+flights_js     = json.dumps(flights,  ensure_ascii=False, indent=2)
+weather_js     = json.dumps(extras_weather_data    or {}, ensure_ascii=False)
+packing_js     = json.dumps(extras_packing_data    or {}, ensure_ascii=False)
+vocabulary_js  = json.dumps(extras_vocabulary_data or {}, ensure_ascii=False)
+n_tabs    = 4  # Days, Hotels, Info, SOS always present
+if audio_chapters:      n_tabs += 1
+if extras_weather_data: n_tabs += 1
+if extras_packing_data: n_tabs += 1
+if extras_vocabulary_data: n_tabs += 1
 grid_cols = f"repeat({n_tabs},1fr)"
 
 # Build AP_CHAPTERS JS array from audio_chapters
@@ -441,6 +607,51 @@ apAudio.addEventListener('play',  () => {{ document.getElementById('ap-play').te
 apAudio.addEventListener('pause', () => {{ document.getElementById('ap-play').textContent = '▶'; }});
 apRenderList();
 """
+
+# ─── Extra tab HTML blocks ───────────────────────────────────────────────────
+weather_tab_html = ""
+weather_tab_btn  = ""
+packing_tab_html = ""
+packing_tab_btn  = ""
+vocab_tab_html   = ""
+vocab_tab_btn    = ""
+
+if extras_weather_data:
+    weather_tab_html = f"""
+  <!-- WEATHER TAB -->
+  <section class="tab-panel" id="tab-weather">
+    <div class="card" style="margin-bottom:0;">
+      <p class="small" style="color:var(--text-muted);margin-bottom:12px;"></p>
+      <div id="weather-daily-list"></div>
+      <div id="weather-tips-block" style="margin-top:16px;"></div>
+    </div>
+  </section>"""
+    weather_tab_btn = f"""
+  <button class="tab-btn" onclick="switchTab('weather')" id="btn-weather">
+    <span class="tab-icon">🌤️</span><span>{t["weather"]}</span>
+  </button>"""
+
+if extras_packing_data:
+    packing_tab_html = f"""
+  <!-- PACKING TAB -->
+  <section class="tab-panel" id="tab-packing">
+    <div id="packing-content"></div>
+  </section>"""
+    packing_tab_btn = f"""
+  <button class="tab-btn" onclick="switchTab('packing')" id="btn-packing">
+    <span class="tab-icon">🧳</span><span>{t["packing"]}</span>
+  </button>"""
+
+if extras_vocabulary_data:
+    vocab_tab_html = f"""
+  <!-- VOCABULARY TAB -->
+  <section class="tab-panel" id="tab-vocabulary">
+    <div id="vocab-content"></div>
+  </section>"""
+    vocab_tab_btn = f"""
+  <button class="tab-btn" onclick="switchTab('vocabulary')" id="btn-vocabulary">
+    <span class="tab-icon">💬</span><span>{t["vocabulary"]}</span>
+  </button>"""
 
 # ─── STEP 4 — Build HTML ─────────────────────────────────────────────────────
 HTML = f"""<!DOCTYPE html>
@@ -1147,6 +1358,9 @@ strong{{font-weight:600;color:var(--text)}}
     <div id="hotels-list"></div>
   </section>
 {audio_tab_html}
+{weather_tab_html}
+{packing_tab_html}
+{vocab_tab_html}
   <!-- INFO TAB -->
   <section class="tab-panel" id="tab-info">
     <div class="card"><h3>✈️ {trip_title}</h3><p>{trip_subtitle}</p>{"<p class='small' style='margin-top:4px;'><strong>" + client_name + "</strong></p>" if client_name else ""}<p class="small muted mb-0">{t["crafted"]} {dmc_name}</p></div>
@@ -1165,16 +1379,22 @@ strong{{font-weight:600;color:var(--text)}}
   <button class="tab-btn active" onclick="switchTab('days')"   id="btn-days"><span class="tab-icon">📅</span><span>{t["days"]}</span></button>
   <button class="tab-btn"        onclick="switchTab('hotels')" id="btn-hotels"><span class="tab-icon">🏨</span><span>{t["hotels"]}</span></button>
 {audio_tab_btn}
+{weather_tab_btn}
+{packing_tab_btn}
+{vocab_tab_btn}
   <button class="tab-btn"        onclick="switchTab('info')"   id="btn-info"><span class="tab-icon">ℹ️</span><span>{t["info"]}</span></button>
   <button class="tab-btn"        onclick="switchTab('sos')"    id="btn-sos"><span class="tab-icon">🚨</span><span>{t["sos"]}</span></button>
 </nav>
 <div class="loomtrip-badge">✨ {t["powered"]}</div>
 
 <script>
-const HOTELS   = {hotels_js};
-const DAYS     = {days_js};
-const CONTACTS = {contacts_js};
-const FLIGHTS  = {flights_js};
+const HOTELS     = {hotels_js};
+const DAYS       = {days_js};
+const CONTACTS   = {contacts_js};
+const FLIGHTS    = {flights_js};
+const WEATHER    = {weather_js};
+const PACKING    = {packing_js};
+const VOCABULARY = {vocabulary_js};
 const M = q => 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(q);
 
 function switchTab(id) {{
@@ -1242,6 +1462,7 @@ function renderDays() {{
         <span class="day-chevron">›</span>
       </button>
       <div class="day-card-body">
+        ${{day.extended_description?`<p style="font-size:14px;line-height:1.7;color:var(--text-muted);margin:0 0 14px;font-family:var(--text-serif);font-style:italic;">${{day.extended_description}}</p>`:''}}
         ${{hb}}
         <div class="tl-label">{t["itinerary"]}</div>
         <ul class="timeline">${{tl}}</ul>
@@ -1352,6 +1573,84 @@ renderDays();
 renderHotels();
 renderFlights();
 renderSOS();
+
+// ─── WEATHER ──────────────────────────────────────────────────────────────────
+function renderWeather() {{
+  if (!WEATHER || !WEATHER.daily) return;
+  const sumEl = document.querySelector('#tab-weather .card > p.small');
+  if (sumEl) sumEl.textContent = WEATHER.summary || '';
+  const dl = document.getElementById('weather-daily-list');
+  if (dl) dl.innerHTML = (WEATHER.daily || []).map(d => `
+    <div style="display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:1px solid var(--divider);">
+      <div style="font-size:28px;line-height:1;flex-shrink:0;">${{d.icon||'🌡️'}}</div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-weight:600;font-size:13px;">${{d.label}}</div>
+        <div style="font-size:12px;color:var(--text-muted);margin:1px 0;">${{d.temp}}</div>
+        <div style="font-size:12px;color:var(--text-muted);">${{d.conditions}}</div>
+      </div>
+    </div>`).join('');
+  const tb = document.getElementById('weather-tips-block');
+  if (tb && WEATHER.tips && WEATHER.tips.length) {{
+    tb.innerHTML = `<div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);margin-bottom:8px;">{t["weather_tips"]}</div>`+
+      WEATHER.tips.map(tip=>`<div style="font-size:13px;padding:4px 0;display:flex;gap:8px;"><span style="color:var(--brand);">›</span><span>${{tip}}</span></div>`).join('');
+  }}
+}}
+renderWeather();
+
+// ─── PACKING ──────────────────────────────────────────────────────────────────
+function renderPacking() {{
+  if (!PACKING || !PACKING.categories) return;
+  const el = document.getElementById('packing-content');
+  if (!el) return;
+  el.innerHTML =
+    (PACKING.intro ? `<div class="card" style="margin-bottom:0;padding-bottom:4px;"><p class="small" style="color:var(--text-muted);">${{PACKING.intro}}</p></div>` : '') +
+    PACKING.categories.map(cat => `
+    <div class="card" style="margin-bottom:0;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+        <span style="font-size:20px;">${{cat.icon}}</span>
+        <span style="font-weight:700;font-size:14px;">${{cat.name}}</span>
+      </div>
+      ${{(cat.items||[]).map(item=>`
+        <div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--divider);">
+          <div style="width:16px;height:16px;border-radius:4px;border:1.5px solid var(--border-strong);flex-shrink:0;cursor:pointer;"
+               onclick="this.style.background=this.style.background?'':'var(--brand)';this.style.borderColor=this.style.borderColor==='transparent'?'var(--border-strong)':'transparent';"></div>
+          <span style="font-size:13px;">${{item}}</span>
+        </div>`).join('')}}
+    </div>`).join('');
+}}
+renderPacking();
+
+// ─── VOCABULARY ───────────────────────────────────────────────────────────────
+function renderVocabulary() {{
+  if (!VOCABULARY || !VOCABULARY.categories) return;
+  const el = document.getElementById('vocab-content');
+  if (!el) return;
+  let html = '';
+  if (VOCABULARY.intro) {{
+    html += `<div class="card" style="margin-bottom:0;padding-bottom:4px;"><p class="small" style="color:var(--text-muted);">${{VOCABULARY.intro}}</p></div>`;
+  }}
+  html += VOCABULARY.categories.map(cat => `
+    <div class="card" style="margin-bottom:0;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+        <span style="font-size:20px;">${{cat.icon}}</span>
+        <span style="font-weight:700;font-size:14px;">${{cat.name}}</span>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--divider);border-radius:8px;overflow:hidden;font-size:11px;color:var(--text-muted);margin-bottom:4px;">
+        <div style="background:var(--surface);padding:4px 8px;font-weight:600;">{t["vocab_pronunciation"]}</div>
+        <div style="background:var(--surface);padding:4px 8px;font-weight:600;">{t["vocab_meaning"]}</div>
+      </div>
+      ${{(cat.phrases||[]).map(p=>`
+        <div style="margin-bottom:6px;padding:8px;background:var(--surface-raised,rgba(0,0,0,0.02));border-radius:8px;border:1px solid var(--divider);">
+          <div style="font-weight:700;font-size:14px;color:var(--brand);margin-bottom:2px;">${{p.native}}</div>
+          <div style="display:flex;justify-content:space-between;gap:8px;">
+            <span style="font-size:11px;color:var(--text-muted);font-style:italic;">${{p.pronunciation||''}}</span>
+            <span style="font-size:12px;text-align:right;">${{p.meaning}}</span>
+          </div>
+        </div>`).join('')}}
+    </div>`).join('');
+  el.innerHTML = html;
+}}
+renderVocabulary();
 
 {audio_js}
 </script>
