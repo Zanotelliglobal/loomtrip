@@ -292,6 +292,7 @@ trip_summary = f"{destination}, {len(days)} days"
 
 if args.extra_weather:
     print("🌤️  Generating weather forecast...")
+    _days_sample = json.dumps([{"date": d.get("date",""), "title": d.get("title","")} for d in days[:3]], ensure_ascii=False)
     WEATHER_PROMPT = f"""You are a luxury travel specialist. Generate a practical weather forecast for a trip to {destination}.
 The trip covers {len(days)} days. Write in {lang_name_for_extras}.
 Return ONLY a JSON object with this structure — no markdown fences:
@@ -304,7 +305,7 @@ Return ONLY a JSON object with this structure — no markdown fences:
   ],
   "tips": ["Bring sunscreen", "Pack a light rain layer", "Evenings can be cool"]
 }}
-Use real climate data for {destination}. Days data: {json.dumps([{{'date':d.get('date',''),'title':d.get('title','')} } for d in days[:3]], ensure_ascii=False)}"""
+Use real climate data for {destination}. Days data: {_days_sample}"""
     try:
         wr = ai.messages.create(model=args.model, max_tokens=1500,
             messages=[{"role":"user","content":WEATHER_PROMPT}])
@@ -317,10 +318,11 @@ Use real climate data for {destination}. Days data: {json.dumps([{{'date':d.get(
 
 if args.extra_descriptions:
     print("📖 Generating extended descriptions...")
+    _days_for_desc = json.dumps([{"day": i+1, "date": d.get("date",""), "title": d.get("title",""), "events": [e.get("title","") for e in d.get("events",[])[:4]]} for i, d in enumerate(days)], ensure_ascii=False)
     DESC_PROMPT = f"""You are a luxury travel writer. For each day of this {destination} trip, write a rich 3–4 sentence narrative description in {lang_name_for_extras}.
 Evoke atmosphere, sensory details, local culture. Return ONLY a JSON array — no markdown:
 [{{"day": 1, "description": "..."}}, ...]
-Days: {json.dumps([{{'day':i+1,'date':d.get('date',''),'title':d.get('title',''),'events':[e.get('title','') for e in d.get('events',[])[:4]]}} for i,d in enumerate(days)], ensure_ascii=False)}"""
+Days: {_days_for_desc}"""
     try:
         dr = ai.messages.create(model=args.model, max_tokens=3000,
             messages=[{"role":"user","content":DESC_PROMPT}])

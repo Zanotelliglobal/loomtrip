@@ -745,6 +745,13 @@ const ADMIN_I18N = {
     extras_label:'Extras', extra_weather:'Weather forecast',
     extra_descriptions:'Extended descriptions', extra_packing:'Packing list',
     extra_vocabulary:'Base vocabulary',
+    building:'Building', show_raw:'▸ Show raw log', hide_raw:'▾ Hide raw log',
+    ps_upload:'Uploading itinerary', ps_parse:'Parsing with AI',
+    ps_audio:'Generating audio guide', ps_weather:'Fetching weather forecast',
+    ps_desc:'Writing descriptions', ps_packing:'Building packing list',
+    ps_vocab:'Generating vocabulary', ps_build:'Building trip app',
+    ps_waiting:'Waiting…', ps_sending:'Sending to server…', ps_complete:'Complete',
+    ps_failed:'Failed — check raw log', ps_ready:'Trip app ready ✓',
   },
   it: {
     studio:'Trip Studio', editing_trip:'MODIFICA VIAGGIO', new_trip_instead:'✕ Nuovo viaggio',
@@ -769,6 +776,13 @@ const ADMIN_I18N = {
     extras_label:'Extra', extra_weather:'Previsioni meteo',
     extra_descriptions:'Descrizioni estese', extra_packing:'Lista valigia',
     extra_vocabulary:'Vocabolario base',
+    building:'Generazione in corso', show_raw:'▸ Mostra log', hide_raw:'▾ Nascondi log',
+    ps_upload:'Caricamento itinerario', ps_parse:'Analisi con AI',
+    ps_audio:'Generazione audio guida', ps_weather:'Previsioni meteo',
+    ps_desc:'Scrittura descrizioni', ps_packing:'Creazione lista valigia',
+    ps_vocab:'Generazione vocabolario', ps_build:'Costruzione app viaggio',
+    ps_waiting:'In attesa…', ps_sending:'Invio al server…', ps_complete:'Completato',
+    ps_failed:'Errore — controlla il log', ps_ready:'App viaggio pronta ✓',
   },
   fr: {
     studio:'Trip Studio', editing_trip:'MODIFIER LE VOYAGE', new_trip_instead:'✕ Nouveau voyage',
@@ -793,6 +807,13 @@ const ADMIN_I18N = {
     extras_label:'Extras', extra_weather:'Météo prévisions',
     extra_descriptions:'Descriptions étendues', extra_packing:'Liste bagages',
     extra_vocabulary:'Vocabulaire de base',
+    building:'Génération en cours', show_raw:'▸ Voir le log', hide_raw:'▾ Masquer le log',
+    ps_upload:'Chargement itinéraire', ps_parse:'Analyse avec IA',
+    ps_audio:'Génération guide audio', ps_weather:'Prévisions météo',
+    ps_desc:'Rédaction des descriptions', ps_packing:'Création liste bagages',
+    ps_vocab:'Génération vocabulaire', ps_build:'Construction app voyage',
+    ps_waiting:'En attente…', ps_sending:'Envoi au serveur…', ps_complete:'Terminé',
+    ps_failed:'Erreur — voir le log', ps_ready:'App voyage prête ✓',
   }
 };
 
@@ -890,15 +911,16 @@ function clearPdf() {
 
 // ─── Pipeline tracker ────────────────────────────────────────────────────────
 const PIPELINE_STAGES = [
-  { id:'upload',   icon:'📤', name:'Uploading itinerary',        keywords:['Loaded','Extracted','Reading PDF'] },
-  { id:'parse',    icon:'🤖', name:'Parsing with AI',            keywords:['Parsing','Parsed','✅ Parsed'] },
-  { id:'audio',    icon:'🎙️', name:'Generating audio guide',     keywords:['Generating audio','audio-','✓ audio'] },
-  { id:'weather',  icon:'🌤️', name:'Fetching weather forecast',  keywords:['weather forecast','Weather forecast'] },
-  { id:'desc',     icon:'📖', name:'Writing descriptions',       keywords:['extended description','Extended description'] },
-  { id:'packing',  icon:'🧳', name:'Building packing list',      keywords:['packing list','Packing list'] },
-  { id:'vocab',    icon:'💬', name:'Generating vocabulary',      keywords:['vocabulary','Vocabulary'] },
-  { id:'build',    icon:'🏗️', name:'Building trip app',          keywords:['Building HTML','Demo ready','Writing'] },
+  { id:'upload',  icon:'📤', key:'ps_upload',  keywords:['Loaded','Extracted','Reading PDF'] },
+  { id:'parse',   icon:'🤖', key:'ps_parse',   keywords:['Parsing','Parsed','✅ Parsed'] },
+  { id:'audio',   icon:'🎙️', key:'ps_audio',   keywords:['Generating audio','audio-','✓ audio'] },
+  { id:'weather', icon:'🌤️', key:'ps_weather', keywords:['weather forecast','Weather forecast'] },
+  { id:'desc',    icon:'📖', key:'ps_desc',    keywords:['extended description','Extended description'] },
+  { id:'packing', icon:'🧳', key:'ps_packing', keywords:['packing list','Packing list'] },
+  { id:'vocab',   icon:'💬', key:'ps_vocab',   keywords:['vocabulary','Vocabulary'] },
+  { id:'build',   icon:'🏗️', key:'ps_build',   keywords:['Building HTML','Demo ready','Writing'] },
 ];
+function psT(key) { return (ADMIN_I18N[adminLang]||ADMIN_I18N.en)[key] || key; }
 
 let pipelineState = {}; // id → {status:'idle'|'active'|'done'|'error', detail:'', startTs, elapsed}
 let activeStageId = null;
@@ -928,15 +950,19 @@ function initPipeline() {
     return `<div class="pipeline-stage" id="ps-${id}">
       <div class="ps-icon" id="ps-icon-${id}">${s.icon}</div>
       <div class="ps-body">
-        <div class="ps-name">${s.name}</div>
-        <div class="ps-detail" id="ps-detail-${id}">Waiting…</div>
+        <div class="ps-name" id="ps-name-${id}">${psT(s.key)}</div>
+        <div class="ps-detail" id="ps-detail-${id}">${psT('ps_waiting')}</div>
       </div>
       <div class="ps-time" id="ps-time-${id}"></div>
     </div>`;
   }).join('');
 
+  // Update log-title and toggle button text
+  document.querySelector('.log-title').textContent = psT('building');
+  document.getElementById('log-toggle').textContent = psT('show_raw');
+
   // Activate first stage immediately
-  setStage('upload', 'active', 'Sending to server…');
+  setStage('upload', 'active', psT('ps_sending'));
   buildStartTs = Date.now();
   startElapsedTimer();
 }
@@ -1002,7 +1028,7 @@ function updatePipelineFromLine(line) {
   // Done previous stage
   if (activeStageId && activeStageId !== stageId && pipelineState[activeStageId]?.status === 'active') {
     const isErr = line.startsWith('❌') || line.startsWith('⚠️');
-    setStage(activeStageId, isErr ? 'error' : 'done', isErr ? line.slice(0,80) : 'Complete');
+    setStage(activeStageId, isErr ? 'error' : 'done', isErr ? line.slice(0,80) : psT('ps_complete'));
   }
   // Activate new stage if not already done
   if (pipelineState[stageId] && pipelineState[stageId].status !== 'done') {
@@ -1015,7 +1041,7 @@ function toggleRawLog() {
   const box = document.getElementById('log-box');
   const btn = document.getElementById('log-toggle');
   const visible = box.classList.toggle('visible');
-  btn.textContent = (visible ? '▾ Hide raw log' : '▸ Show raw log');
+  btn.textContent = visible ? psT('hide_raw') : psT('show_raw');
 }
 
 // ─── Generate ─────────────────────────────────────────────────────────────────
@@ -1087,9 +1113,9 @@ function pollLog(jobId) {
       es.close();
       clearInterval(elapsedTimer);
       // Mark last active stage done
-      if (activeStageId) setStage(activeStageId, 'done', 'Complete');
+      if (activeStageId) setStage(activeStageId, 'done', psT('ps_complete'));
       // Mark build done explicitly
-      if (pipelineState['build']) setStage('build', 'done', 'Trip app ready ✓');
+      if (pipelineState['build']) setStage('build', 'done', psT('ps_ready'));
       document.getElementById('progress-fill').style.width='100%';
       document.getElementById('log-heartbeat').className = 'log-heartbeat done';
       document.getElementById('generate-btn').disabled=false;
@@ -1100,7 +1126,7 @@ function pollLog(jobId) {
     if (msg === '__ERROR__') {
       es.close();
       clearInterval(elapsedTimer);
-      if (activeStageId) setStage(activeStageId, 'error', 'Failed — check raw log');
+      if (activeStageId) setStage(activeStageId, 'error', psT('ps_failed'));
       document.getElementById('log-heartbeat').className = 'log-heartbeat error';
       document.getElementById('generate-btn').disabled=false;
       document.getElementById('generate-btn').innerHTML=RESET_BTN;
