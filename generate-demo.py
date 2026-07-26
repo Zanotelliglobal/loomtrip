@@ -139,7 +139,8 @@ Return ONLY a valid JSON object — no markdown fences, no explanation.
 
 Rules: hotel_n = 1-based index in hotels array (or null). Mark booked = (booked), recommended = (recommended).
 Extract ALL days. Extract ALL contacts groups (Italian office, local office, guides, drivers, etc.) — include every phone number listed. Phone numbers must include country code with + prefix. Extract ALL flights (outbound and return) including flight number, airports with IATA codes, departure/arrival times, and duration.
-For timeline times: use exact times from the itinerary (e.g. "09:00"). If no time is given, use a natural label like "Morning", "Afternoon", "Evening", "Lunch", "Dinner" — NEVER invent or estimate times that are not in the source text.
+For timeline times: use exact times from the itinerary (e.g. "09:00"). If no time is given, use a natural label translated into the detected language — EN: "Morning/Afternoon/Evening/Lunch/Dinner", IT: "Mattina/Pomeriggio/Sera/Pranzo/Cena", FR: "Matin/Après-midi/Soir/Déjeuner/Dîner" — NEVER invent or estimate times that are not in the source text.
+For the "stats" field, translate transport type words into the detected language — EN: "Flight/Transfer/Drive", IT: "Volo/Trasferimento/Guida", FR: "Vol/Transfert/Route".
 IMPORTANT: Write "trip_subtitle" in the same language as the "language" field you detect. Examples: EN → "7 Days · 6 Nights · May 2026", IT → "7 Giorni · 6 Notti · Maggio 2026", FR → "7 Jours · 6 Nuits · Mai 2026".
 
 ITINERARY:
