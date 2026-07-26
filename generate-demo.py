@@ -565,7 +565,7 @@ function apPlay(n) {{
   const ch = AP_CHAPTERS.find(c => c.n === n);
   if (!ch) return;
   apCurrent = n;
-  const base = window.location.pathname.replace(/[^/]*$/, '');
+  const base = window.location.pathname.replace(/\/?$/, '/');
   apAudio.src = base + ch.mp3;
   apAudio.playbackRate = apRate;
   apAudio.play();
