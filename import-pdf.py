@@ -25,9 +25,13 @@ parser.add_argument("--color",       default=None)
 parser.add_argument("--logo",        default=None)
 parser.add_argument("--lang",        default=None)
 parser.add_argument("--voice",       default=None)
-parser.add_argument("--no-audio",    action="store_true")
-parser.add_argument("--preview",     action="store_true", help="Print extracted text only")
-parser.add_argument("--model",       default="claude-haiku-4-5")
+parser.add_argument("--no-audio",            action="store_true")
+parser.add_argument("--preview",             action="store_true", help="Print extracted text only")
+parser.add_argument("--model",               default="claude-haiku-4-5")
+parser.add_argument("--extra-weather",       action="store_true")
+parser.add_argument("--extra-descriptions",  action="store_true")
+parser.add_argument("--extra-packing",       action="store_true")
+parser.add_argument("--extra-vocabulary",    action="store_true")
 args = parser.parse_args()
 
 pdf_path = Path(args.pdf)
@@ -72,11 +76,15 @@ tmp_txt.write_text(full_text, encoding="utf-8")
 
 gen_script = Path(__file__).parent / "generate-demo.py"
 cmd = [sys.executable, str(gen_script), "--itinerary", str(tmp_txt), "--model", args.model]
-if args.color:    cmd += ["--color",   args.color]
-if args.logo:     cmd += ["--logo",    args.logo]
-if args.lang:     cmd += ["--lang",    args.lang]
-if args.voice:    cmd += ["--voice",   args.voice]
-if args.no_audio: cmd += ["--no-audio"]
+if args.color:               cmd += ["--color",   args.color]
+if args.logo:                cmd += ["--logo",    args.logo]
+if args.lang:                cmd += ["--lang",    args.lang]
+if args.voice:               cmd += ["--voice",   args.voice]
+if args.no_audio:            cmd += ["--no-audio"]
+if args.extra_weather:       cmd += ["--extra-weather"]
+if args.extra_descriptions:  cmd += ["--extra-descriptions"]
+if args.extra_packing:       cmd += ["--extra-packing"]
+if args.extra_vocabulary:    cmd += ["--extra-vocabulary"]
 
 env = os.environ.copy()
 env["PYTHONWARNINGS"] = "ignore"
