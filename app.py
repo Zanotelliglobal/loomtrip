@@ -1617,6 +1617,7 @@ def build_meta(build_id):
     return jsonify(json.loads(meta_file.read_text()))
 
 @app.route("/preview/<build_id>")
+@app.route("/preview/<build_id>/")
 def preview(build_id):
     build_dir = BUILDS_DIR / build_id
     return send_from_directory(str(build_dir), "index.html")
