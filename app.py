@@ -669,7 +669,7 @@ label {
 
   <div id="log-section" class="log-section" style="display:none;">
     <div class="log-header">
-      <span class="log-title">Building</span>
+      <span class="log-title" data-i18n="building">Building</span>
       <div class="log-meta">
         <span class="log-elapsed" id="log-elapsed">0:00</span>
         <div class="log-heartbeat" id="log-heartbeat"></div>
@@ -677,7 +677,7 @@ label {
     </div>
     <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
     <div class="pipeline" id="pipeline"></div>
-    <button class="log-toggle" id="log-toggle" onclick="toggleRawLog()">▸ Show raw log</button>
+    <button class="log-toggle" id="log-toggle" data-i18n="show_raw" onclick="toggleRawLog()">▸ Show raw log</button>
     <div class="log-box" id="log-box"></div>
   </div>
 
@@ -950,16 +950,15 @@ function initPipeline() {
     return `<div class="pipeline-stage" id="ps-${id}">
       <div class="ps-icon" id="ps-icon-${id}">${s.icon}</div>
       <div class="ps-body">
-        <div class="ps-name" id="ps-name-${id}">${psT(s.key)}</div>
-        <div class="ps-detail" id="ps-detail-${id}">${psT('ps_waiting')}</div>
+        <div class="ps-name" id="ps-name-${id}" data-i18n="${s.key}">${s.key}</div>
+        <div class="ps-detail" id="ps-detail-${id}" data-i18n="ps_waiting">ps_waiting</div>
       </div>
       <div class="ps-time" id="ps-time-${id}"></div>
     </div>`;
   }).join('');
 
-  // Update log-title and toggle button text
-  document.querySelector('.log-title').textContent = psT('building');
-  document.getElementById('log-toggle').textContent = psT('show_raw');
+  // Let applyAdminLang handle all text translations (including new pipeline elements)
+  applyAdminLang();
 
   // Activate first stage immediately
   setStage('upload', 'active', psT('ps_sending'));
@@ -1041,6 +1040,7 @@ function toggleRawLog() {
   const box = document.getElementById('log-box');
   const btn = document.getElementById('log-toggle');
   const visible = box.classList.toggle('visible');
+  btn.setAttribute('data-i18n', visible ? 'hide_raw' : 'show_raw');
   btn.textContent = visible ? psT('hide_raw') : psT('show_raw');
 }
 
@@ -1138,7 +1138,7 @@ function pollLog(jobId) {
 
     if (firstLine) {
       firstLine = false;
-      setStage('upload', 'done', 'Received');
+      setStage('upload', 'done', psT('ps_complete'));
     }
 
     updatePipelineFromLine(msg);
