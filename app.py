@@ -752,6 +752,10 @@ const ADMIN_I18N = {
     ps_vocab:'Generating vocabulary', ps_build:'Building trip app',
     ps_waiting:'Waiting…', ps_sending:'Sending to server…', ps_complete:'Complete',
     ps_failed:'Failed — check raw log', ps_ready:'Trip app ready ✓',
+    ps_stall_12:'Still working…',
+    ps_stall_30:'Claude is thinking, please wait…',
+    ps_stall_60:'This can take a minute, almost there…',
+    ps_stall_120:'Large file or many extras — still running…',
   },
   it: {
     studio:'Trip Studio', editing_trip:'MODIFICA VIAGGIO', new_trip_instead:'✕ Nuovo viaggio',
@@ -783,6 +787,10 @@ const ADMIN_I18N = {
     ps_vocab:'Generazione vocabolario', ps_build:'Costruzione app viaggio',
     ps_waiting:'In attesa…', ps_sending:'Invio al server…', ps_complete:'Completato',
     ps_failed:'Errore — controlla il log', ps_ready:'App viaggio pronta ✓',
+    ps_stall_12:'Elaborazione in corso…',
+    ps_stall_30:'Claude sta elaborando, attendere…',
+    ps_stall_60:'Ancora un momento, ci siamo quasi…',
+    ps_stall_120:'File grande o molti extra — ancora in esecuzione…',
   },
   fr: {
     studio:'Trip Studio', editing_trip:'MODIFIER LE VOYAGE', new_trip_instead:'✕ Nouveau voyage',
@@ -814,6 +822,10 @@ const ADMIN_I18N = {
     ps_vocab:'Génération vocabulaire', ps_build:'Construction app voyage',
     ps_waiting:'En attente…', ps_sending:'Envoi au serveur…', ps_complete:'Terminé',
     ps_failed:'Erreur — voir le log', ps_ready:'App voyage prête ✓',
+    ps_stall_12:'Traitement en cours…',
+    ps_stall_30:'Claude réfléchit, veuillez patienter…',
+    ps_stall_60:'Encore un instant, on y est presque…',
+    ps_stall_120:'Fichier volumineux ou nombreux extras — toujours en cours…',
   }
 };
 
@@ -964,7 +976,19 @@ function initPipeline() {
   setStage('upload', 'active', psT('ps_sending'));
   buildStartTs = Date.now();
   startElapsedTimer();
+  startStallDetector();
 }
+
+// Stall messages shown on the active stage detail when no log line arrives
+const STALL_MSGS = [
+  [12,  'ps_stall_12'],
+  [30,  'ps_stall_30'],
+  [60,  'ps_stall_60'],
+  [120, 'ps_stall_120'],
+];
+let lastLineTs = null;
+let stallTimer  = null;
+let activeStageElapsedTimer = null;
 
 function startElapsedTimer() {
   if (elapsedTimer) clearInterval(elapsedTimer);
@@ -974,6 +998,35 @@ function startElapsedTimer() {
     const m = Math.floor(s/60), sec = s%60;
     document.getElementById('log-elapsed').textContent = m+':'+(sec<10?'0':'')+sec;
   }, 1000);
+}
+
+function startStallDetector() {
+  if (stallTimer) clearInterval(stallTimer);
+  lastLineTs = Date.now();
+  stallTimer = setInterval(() => {
+    if (!lastLineTs || !activeStageId) return;
+    const silent = Math.floor((Date.now()-lastLineTs)/1000);
+    // Find the right stall message
+    let msg = null;
+    for (const [secs, key] of STALL_MSGS) {
+      if (silent >= secs) msg = key;
+    }
+    if (msg) {
+      const detEl = document.getElementById('ps-detail-'+activeStageId);
+      if (detEl) detEl.textContent = psT(msg);
+    }
+    // Update active stage elapsed time live
+    if (activeStageId && pipelineState[activeStageId]?.startTs) {
+      const stageS = Math.floor((Date.now()-pipelineState[activeStageId].startTs)/1000);
+      const el = document.getElementById('ps-time-'+activeStageId);
+      if (el) el.textContent = stageS+'s';
+    }
+  }, 2000);
+}
+
+function stopStallDetector() {
+  if (stallTimer) { clearInterval(stallTimer); stallTimer = null; }
+  lastLineTs = null;
 }
 
 function setStage(id, status, detail) {
@@ -1109,9 +1162,12 @@ function pollLog(jobId) {
   es.onmessage = e => {
     const msg = e.data;
 
+    lastLineTs = Date.now();
+
     if (msg === '__DONE__') {
       es.close();
       clearInterval(elapsedTimer);
+      stopStallDetector();
       // Mark last active stage done
       if (activeStageId) setStage(activeStageId, 'done', psT('ps_complete'));
       // Mark build done explicitly
@@ -1126,6 +1182,7 @@ function pollLog(jobId) {
     if (msg === '__ERROR__') {
       es.close();
       clearInterval(elapsedTimer);
+      stopStallDetector();
       if (activeStageId) setStage(activeStageId, 'error', psT('ps_failed'));
       document.getElementById('log-heartbeat').className = 'log-heartbeat error';
       document.getElementById('generate-btn').disabled=false;
