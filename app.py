@@ -26,8 +26,10 @@ app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 20 * 1024 * 1024  # 20 MB upload limit
 
 BASE_DIR   = Path(__file__).parent
-BUILDS_DIR = BASE_DIR / "builds"
-BUILDS_DIR.mkdir(exist_ok=True)
+# LOOMTRIP_BUILDS_DIR lets you point to a persistent volume on Render
+# (set it to the disk mount path, e.g. /data/builds)
+BUILDS_DIR = Path(os.environ.get("LOOMTRIP_BUILDS_DIR", str(BASE_DIR / "builds")))
+BUILDS_DIR.mkdir(parents=True, exist_ok=True)
 
 # ─── Admin auth ───────────────────────────────────────────────────────────────
 ADMIN_USER = os.environ.get("ADMIN_USER", "admin")
