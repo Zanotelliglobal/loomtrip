@@ -249,51 +249,100 @@ label {
   margin-bottom: 10px;
 }
 .log-title { font-size: 12px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); }
-.progress-bar { height: 2px; background: var(--border); border-radius: 2px; overflow: hidden; margin-bottom: 12px; }
-.progress-fill { height: 100%; background: var(--accent); border-radius: 2px; width: 0%; transition: width 0.5s ease; }
+.log-meta  { display: flex; align-items: center; gap: 10px; }
+.log-elapsed { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.log-heartbeat {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--accent); opacity: 0;
+  transition: opacity 0.2s;
+}
+.log-heartbeat.alive { opacity: 1; animation: hb-pulse 1.6s ease-in-out infinite; }
+.log-heartbeat.done  { opacity: 1; background: #4ADE80; animation: none; }
+.log-heartbeat.error { opacity: 1; background: #F87171; animation: none; }
+@keyframes hb-pulse { 0%,100%{opacity:0.3} 50%{opacity:1} }
+
+.progress-bar { height: 2px; background: var(--border); border-radius: 2px; overflow: hidden; margin-bottom: 16px; }
+.progress-fill { height: 100%; background: var(--accent); border-radius: 2px; width: 0%; transition: width 0.6s ease; }
+
+/* Pipeline stage tracker */
+.pipeline {
+  display: flex; flex-direction: column; gap: 0;
+  background: #111009; border-radius: var(--radius);
+  border: 1px solid rgba(255,255,255,0.06);
+  overflow: hidden; margin-bottom: 2px;
+}
+.pipeline-stage {
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 11px 16px;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  transition: background 0.2s;
+}
+.pipeline-stage:last-child { border-bottom: none; }
+.pipeline-stage.ps-active  { background: rgba(196,135,58,0.07); }
+.pipeline-stage.ps-done    { background: rgba(74,222,128,0.04); }
+.pipeline-stage.ps-error   { background: rgba(248,113,113,0.06); }
+
+.ps-icon {
+  width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; margin-top: 1px;
+  background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.25);
+  transition: all 0.25s;
+}
+.pipeline-stage.ps-active .ps-icon {
+  background: rgba(196,135,58,0.25); color: var(--accent);
+  animation: ps-spin 1s linear infinite;
+}
+.pipeline-stage.ps-done  .ps-icon { background: rgba(74,222,128,0.18); color: #4ADE80; }
+.pipeline-stage.ps-error .ps-icon { background: rgba(248,113,113,0.18); color: #F87171; }
+@keyframes ps-spin { to { transform: rotate(360deg); } }
+
+.ps-body { flex: 1; min-width: 0; }
+.ps-name {
+  font-family: var(--sans); font-size: 12px; font-weight: 600;
+  color: rgba(255,255,255,0.55); letter-spacing: 0.2px;
+  transition: color 0.2s;
+}
+.pipeline-stage.ps-active .ps-name { color: rgba(255,255,255,0.9); }
+.pipeline-stage.ps-done   .ps-name { color: rgba(255,255,255,0.6); }
+.pipeline-stage.ps-error  .ps-name { color: #F87171; }
+.ps-detail {
+  font-family: "SF Mono","Fira Code",monospace;
+  font-size: 10.5px; color: rgba(255,255,255,0.28);
+  margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  max-width: 100%; display: none;
+}
+.pipeline-stage.ps-active .ps-detail,
+.pipeline-stage.ps-done   .ps-detail,
+.pipeline-stage.ps-error  .ps-detail { display: block; }
+.ps-time {
+  font-size: 10px; color: rgba(255,255,255,0.22);
+  font-variant-numeric: tabular-nums; flex-shrink: 0; align-self: center;
+}
+.pipeline-stage.ps-done .ps-time { color: #4ADE80; opacity: 0.7; }
+
+/* raw log (collapsible) */
+.log-toggle {
+  font-size: 10.5px; color: var(--muted); cursor: pointer;
+  padding: 6px 0 0; display: inline-flex; align-items: center; gap: 5px;
+  user-select: none; background: none; border: none; font-family: var(--sans);
+}
+.log-toggle:hover { color: var(--text); }
 .log-box {
   background: #111009; color: #C9C6C1;
-  border-radius: var(--radius); padding: 16px 18px;
+  border-radius: var(--radius); padding: 14px 16px;
   font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
-  font-size: 11.5px; line-height: 1.75;
-  min-height: 180px; max-height: 340px; overflow-y: auto;
+  font-size: 11px; line-height: 1.7;
+  max-height: 220px; overflow-y: auto;
   border: 1px solid rgba(255,255,255,0.06);
-  position: relative;
+  margin-top: 6px; display: none;
 }
+.log-box.visible { display: block; }
 .log-line { display: block; }
 .log-ok   { color: #4ADE80; }
 .log-err  { color: #F87171; }
 .log-info { color: #FCD34D; }
-
-/* waiting indicator */
-.log-waiting {
-  position: absolute; inset: 0;
-  display: flex; flex-direction: column;
-  align-items: center; justify-content: center; gap: 14px;
-}
-.log-spinner {
-  width: 28px; height: 28px;
-  border: 2.5px solid rgba(255,255,255,0.08);
-  border-top-color: var(--accent);
-  border-radius: 50%;
-  animation: spin 0.75s linear infinite;
-}
 @keyframes spin { to { transform: rotate(360deg); } }
-.log-waiting-text {
-  font-family: var(--sans); font-size: 12px;
-  color: rgba(255,255,255,0.3); letter-spacing: 0.3px;
-}
-.log-dots::after {
-  content: '';
-  animation: dots 1.4s steps(4, end) infinite;
-}
-@keyframes dots {
-  0%   { content: ''; }
-  25%  { content: '.'; }
-  50%  { content: '..'; }
-  75%  { content: '...'; }
-  100% { content: ''; }
-}
 
 /* ── GMAIL / EXCEL TABLE ── */
 .trip-table { width: 100%; border-collapse: collapse; }
@@ -620,15 +669,16 @@ label {
 
   <div id="log-section" class="log-section" style="display:none;">
     <div class="log-header">
-      <span class="log-title">Build Log</span>
-    </div>
-    <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
-    <div class="log-box" id="log-box">
-      <div class="log-waiting" id="log-waiting">
-        <div class="log-spinner"></div>
-        <div class="log-waiting-text">Starting up<span class="log-dots"></span></div>
+      <span class="log-title">Building</span>
+      <div class="log-meta">
+        <span class="log-elapsed" id="log-elapsed">0:00</span>
+        <div class="log-heartbeat" id="log-heartbeat"></div>
       </div>
     </div>
+    <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+    <div class="pipeline" id="pipeline"></div>
+    <button class="log-toggle" id="log-toggle" onclick="toggleRawLog()">▸ Show raw log</button>
+    <div class="log-box" id="log-box"></div>
   </div>
 
   <div id="builds-section">
@@ -838,6 +888,136 @@ function clearPdf() {
   document.getElementById('pdf-input').value = '';
 }
 
+// ─── Pipeline tracker ────────────────────────────────────────────────────────
+const PIPELINE_STAGES = [
+  { id:'upload',   icon:'📤', name:'Uploading itinerary',        keywords:['Loaded','Extracted','Reading PDF'] },
+  { id:'parse',    icon:'🤖', name:'Parsing with AI',            keywords:['Parsing','Parsed','✅ Parsed'] },
+  { id:'audio',    icon:'🎙️', name:'Generating audio guide',     keywords:['Generating audio','audio-','✓ audio'] },
+  { id:'weather',  icon:'🌤️', name:'Fetching weather forecast',  keywords:['weather forecast','Weather forecast'] },
+  { id:'desc',     icon:'📖', name:'Writing descriptions',       keywords:['extended description','Extended description'] },
+  { id:'packing',  icon:'🧳', name:'Building packing list',      keywords:['packing list','Packing list'] },
+  { id:'vocab',    icon:'💬', name:'Generating vocabulary',      keywords:['vocabulary','Vocabulary'] },
+  { id:'build',    icon:'🏗️', name:'Building trip app',          keywords:['Building HTML','Demo ready','Writing'] },
+];
+
+let pipelineState = {}; // id → {status:'idle'|'active'|'done'|'error', detail:'', startTs, elapsed}
+let activeStageId = null;
+let buildStartTs = null;
+let elapsedTimer = null;
+
+function initPipeline() {
+  // Determine which stages are relevant based on extras toggles
+  const hasAudio    = !document.getElementById('no-audio').checked;
+  const hasWeather  = document.getElementById('extra-weather').checked;
+  const hasDesc     = document.getElementById('extra-descriptions').checked;
+  const hasPacking  = document.getElementById('extra-packing').checked;
+  const hasVocab    = document.getElementById('extra-vocabulary').checked;
+  const visibleIds  = ['upload','parse'];
+  if (hasAudio)   visibleIds.push('audio');
+  if (hasWeather) visibleIds.push('weather');
+  if (hasDesc)    visibleIds.push('desc');
+  if (hasPacking) visibleIds.push('packing');
+  if (hasVocab)   visibleIds.push('vocab');
+  visibleIds.push('build');
+
+  pipelineState = {};
+  const el = document.getElementById('pipeline');
+  el.innerHTML = visibleIds.map(id => {
+    const s = PIPELINE_STAGES.find(s=>s.id===id);
+    pipelineState[id] = { status:'idle', detail:'', startTs:null, elapsed:null };
+    return `<div class="pipeline-stage" id="ps-${id}">
+      <div class="ps-icon" id="ps-icon-${id}">${s.icon}</div>
+      <div class="ps-body">
+        <div class="ps-name">${s.name}</div>
+        <div class="ps-detail" id="ps-detail-${id}">Waiting…</div>
+      </div>
+      <div class="ps-time" id="ps-time-${id}"></div>
+    </div>`;
+  }).join('');
+
+  // Activate first stage immediately
+  setStage('upload', 'active', 'Sending to server…');
+  buildStartTs = Date.now();
+  startElapsedTimer();
+}
+
+function startElapsedTimer() {
+  if (elapsedTimer) clearInterval(elapsedTimer);
+  elapsedTimer = setInterval(() => {
+    if (!buildStartTs) return;
+    const s = Math.floor((Date.now()-buildStartTs)/1000);
+    const m = Math.floor(s/60), sec = s%60;
+    document.getElementById('log-elapsed').textContent = m+':'+(sec<10?'0':'')+sec;
+  }, 1000);
+}
+
+function setStage(id, status, detail) {
+  const st = pipelineState[id];
+  if (!st) return;
+  const el = document.getElementById('ps-'+id);
+  if (!el) return;
+  if (status === 'active' && st.status !== 'active') st.startTs = Date.now();
+  if ((status === 'done' || status === 'error') && st.startTs) {
+    st.elapsed = ((Date.now()-st.startTs)/1000).toFixed(1)+'s';
+    document.getElementById('ps-time-'+id).textContent = st.elapsed;
+  }
+  st.status = status;
+  st.detail = detail;
+  el.className = 'pipeline-stage' + (status==='active'?' ps-active':status==='done'?' ps-done':status==='error'?' ps-error':'');
+  const iconEl = document.getElementById('ps-icon-'+id);
+  const s = PIPELINE_STAGES.find(s=>s.id===id);
+  if (status === 'active') iconEl.textContent = '↻';
+  else if (status === 'done') iconEl.textContent = '✓';
+  else if (status === 'error') iconEl.textContent = '✕';
+  else iconEl.textContent = s ? s.icon : '·';
+  document.getElementById('ps-detail-'+id).textContent = detail || '';
+}
+
+function classifyLine(line) {
+  // Map a log line to a stage id (or null)
+  if (/loaded|extracted|reading pdf/i.test(line)) return 'upload';
+  if (/parsing|parsed/i.test(line)) return 'parse';
+  if (/generating audio|audio narration|🎙️|audio-\d+|✓ audio/i.test(line)) return 'audio';
+  if (/weather/i.test(line)) return 'weather';
+  if (/extended desc|descriptions/i.test(line)) return 'desc';
+  if (/packing/i.test(line)) return 'packing';
+  if (/vocabulary/i.test(line)) return 'vocab';
+  if (/building html|writing|demo ready/i.test(line)) return 'build';
+  return null;
+}
+
+function updatePipelineFromLine(line) {
+  const hb = document.getElementById('log-heartbeat');
+  hb.classList.add('alive');
+  setTimeout(() => hb.classList.remove('alive'), 400);
+
+  const stageId = classifyLine(line);
+  if (!stageId) {
+    // Update detail of current active stage
+    if (activeStageId && pipelineState[activeStageId]?.status === 'active') {
+      document.getElementById('ps-detail-'+activeStageId).textContent = line.slice(0,80);
+    }
+    return;
+  }
+  // Done previous stage
+  if (activeStageId && activeStageId !== stageId && pipelineState[activeStageId]?.status === 'active') {
+    const isErr = line.startsWith('❌') || line.startsWith('⚠️');
+    setStage(activeStageId, isErr ? 'error' : 'done', isErr ? line.slice(0,80) : 'Complete');
+  }
+  // Activate new stage if not already done
+  if (pipelineState[stageId] && pipelineState[stageId].status !== 'done') {
+    setStage(stageId, 'active', line.slice(0,80));
+    activeStageId = stageId;
+  }
+}
+
+function toggleRawLog() {
+  const box = document.getElementById('log-box');
+  const btn = document.getElementById('log-toggle');
+  const visible = box.classList.toggle('visible');
+  btn.textContent = (visible ? '▾ Hide raw log' : '▸ Show raw log');
+}
+
 // ─── Generate ─────────────────────────────────────────────────────────────────
 let currentJobId = null;
 function startGenerate() {
@@ -849,8 +1029,13 @@ function startGenerate() {
   btn.innerHTML = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg> Working…';
 
   document.getElementById('log-section').style.display = 'block';
-  document.getElementById('log-box').innerHTML = '<div class="log-waiting" id="log-waiting"><div class="log-spinner"></div><div class="log-waiting-text">Starting up<span class="log-dots"></span></div></div>';
+  document.getElementById('log-box').innerHTML = '';
+  document.getElementById('log-box').classList.remove('visible');
+  document.getElementById('log-toggle').textContent = '▸ Show raw log';
+  document.getElementById('log-heartbeat').className = 'log-heartbeat alive';
+  document.getElementById('log-elapsed').textContent = '0:00';
   document.getElementById('progress-fill').style.width = '4%';
+  initPipeline();
 
   const fd = new FormData();
   if (pdfFile) fd.append('pdf', pdfFile);
@@ -890,12 +1075,23 @@ function appendLog(type, text) {
 function pollLog(jobId) {
   const es = new EventSource(`/api/log/${jobId}`);
   let progress = 5;
+  const RESET_BTN = '<svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1v14M1 8h14"/></svg> <span data-i18n="btn_generate">Generate Trip</span>';
+
+  // Mark upload stage done once we get first line back
+  let firstLine = true;
+
   es.onmessage = e => {
     const msg = e.data;
-    const RESET_BTN = '<svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1v14M1 8h14"/></svg> Generate Trip';
+
     if (msg === '__DONE__') {
       es.close();
+      clearInterval(elapsedTimer);
+      // Mark last active stage done
+      if (activeStageId) setStage(activeStageId, 'done', 'Complete');
+      // Mark build done explicitly
+      if (pipelineState['build']) setStage('build', 'done', 'Trip app ready ✓');
       document.getElementById('progress-fill').style.width='100%';
+      document.getElementById('log-heartbeat').className = 'log-heartbeat done';
       document.getElementById('generate-btn').disabled=false;
       document.getElementById('generate-btn').innerHTML=RESET_BTN;
       loadBuilds();
@@ -903,13 +1099,29 @@ function pollLog(jobId) {
     }
     if (msg === '__ERROR__') {
       es.close();
+      clearInterval(elapsedTimer);
+      if (activeStageId) setStage(activeStageId, 'error', 'Failed — check raw log');
+      document.getElementById('log-heartbeat').className = 'log-heartbeat error';
       document.getElementById('generate-btn').disabled=false;
       document.getElementById('generate-btn').innerHTML=RESET_BTN;
+      // Auto-open raw log on error
+      document.getElementById('log-box').classList.add('visible');
+      document.getElementById('log-toggle').textContent = '▾ Hide raw log';
       return;
     }
-    const type = msg.startsWith('✅')||msg.startsWith('✓') ? 'ok' : msg.startsWith('❌')||msg.startsWith('⚠️') ? 'error' : msg.startsWith('🤖')||msg.startsWith('✍️')||msg.startsWith('🎙️') ? 'info' : '';
+
+    if (firstLine) {
+      firstLine = false;
+      setStage('upload', 'done', 'Received');
+    }
+
+    updatePipelineFromLine(msg);
+
+    const type = msg.startsWith('✅')||msg.startsWith('✓') ? 'ok'
+               : msg.startsWith('❌')||msg.startsWith('⚠️') ? 'error'
+               : msg.startsWith('🤖')||msg.startsWith('✍️')||msg.startsWith('🎙️') ? 'info' : '';
     appendLog(type, msg);
-    progress = Math.min(progress + 8, 90);
+    progress = Math.min(progress + 5, 92);
     document.getElementById('progress-fill').style.width = progress + '%';
   };
   es.onerror = () => { es.close(); };
@@ -1648,6 +1860,12 @@ def enter_code():
     if not build_dir.exists():
         return jsonify({"error": "This trip has been archived."}), 404
     return jsonify({"url": f"/preview/{build_id}"})
+
+@app.route("/favicon.ico")
+def favicon():
+    svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#C4873A"/><text x="16" y="22" text-anchor="middle" font-size="18" font-family="serif">✦</text></svg>'
+    from flask import Response
+    return Response(svg, mimetype="image/svg+xml")
 
 @app.route("/admin")
 @require_admin
