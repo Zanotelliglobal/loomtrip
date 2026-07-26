@@ -139,12 +139,28 @@ Return ONLY a valid JSON object — no markdown fences, no explanation.
 
 Rules: hotel_n = 1-based index in hotels array (or null). Mark booked = (booked), recommended = (recommended).
 Extract ALL days. Extract ALL contacts groups (Italian office, local office, guides, drivers, etc.) — include every phone number listed. Phone numbers must include country code with + prefix. Extract ALL flights (outbound and return) including flight number, airports with IATA codes, departure/arrival times, and duration.
-For timeline times: use exact times from the itinerary (e.g. "09:00"). If no time is given, use a natural label translated into the detected language — EN: "Morning/Afternoon/Evening/Lunch/Dinner", IT: "Mattina/Pomeriggio/Sera/Pranzo/Cena", FR: "Matin/Après-midi/Soir/Déjeuner/Dîner" — NEVER invent or estimate times that are not in the source text.
-For the "stats" field, translate transport type words into the detected language — EN: "Flight/Transfer/Drive", IT: "Volo/Trasferimento/Guida", FR: "Vol/Transfert/Route".
-IMPORTANT: Write "trip_subtitle" in the same language as the "language" field you detect. Examples: EN → "7 Days · 6 Nights · May 2026", IT → "7 Giorni · 6 Notti · Maggio 2026", FR → "7 Jours · 6 Nuits · Mai 2026".
+For timeline times: use exact times from the itinerary (e.g. "09:00"). If no time is given, use a natural label translated into the OUTPUT language — EN: "Morning/Afternoon/Evening/Lunch/Dinner", IT: "Mattina/Pomeriggio/Sera/Pranzo/Cena", FR: "Matin/Après-midi/Soir/Déjeuner/Dîner" — NEVER invent or estimate times that are not in the source text.
+For the "stats" field, translate transport type words into the OUTPUT language — EN: "Flight/Transfer/Drive", IT: "Volo/Trasferimento/Guida", FR: "Vol/Transfert/Route".
+IMPORTANT: Write "trip_subtitle" in the OUTPUT language. Examples: EN → "7 Days · 6 Nights · May 2026", IT → "7 Giorni · 6 Notti · Maggio 2026", FR → "7 Jours · 6 Nuits · Mai 2026".
 
 ITINERARY:
 """
+
+# If language is forced via --lang, inject it into the prompt so Claude uses the right language
+# for ALL text fields (timeline labels, stats, trip_subtitle, language field itself)
+_lang_names = {"en": "English", "it": "Italian", "fr": "French"}
+if args.lang and args.lang in _lang_names:
+    _forced = _lang_names[args.lang]
+    PARSE_PROMPT = PARSE_PROMPT.replace(
+        '"language": "client language: it | en | fr"',
+        f'"language": "{args.lang}"  ← USE THIS LANGUAGE; do NOT auto-detect'
+    ).replace(
+        "OUTPUT language",
+        _forced
+    ).replace(
+        "For timeline times: use exact times from the itinerary",
+        f"OUTPUT LANGUAGE IS {_forced.upper()} — write all labels, timeline labels, stats, trip_subtitle in {_forced}.\nFor timeline times: use exact times from the itinerary"
+    )
 
 print(f"🤖 Parsing itinerary ({args.model})...")
 msg = ai.messages.create(
