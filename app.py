@@ -973,6 +973,7 @@ function initPipeline() {
   applyAdminLang();
 
   // Activate first stage immediately
+  activeStageId = 'upload';
   setStage('upload', 'active', psT('ps_sending'));
   buildStartTs = Date.now();
   startElapsedTimer();
