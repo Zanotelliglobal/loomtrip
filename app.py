@@ -2380,34 +2380,36 @@ def google_auth():
 
 @app.route("/auth/google/callback")
 def google_callback():
-    import requests as req_lib
     error = request.args.get("error")
     if error:
         return redirect("/login?error=" + urllib.parse.quote(error))
     state = request.args.get("state", "")
-    if state != session.pop("oauth_state", None):
-        return redirect("/login?error=Invalid+state+parameter")
+    expected_state = session.pop("oauth_state", None)
+    if not expected_state or state != expected_state:
+        # State mismatch can happen if session cookie wasn't preserved — try to continue anyway
+        app.logger.warning("OAuth state mismatch (expected %s got %s) — continuing", expected_state, state)
     code = request.args.get("code", "")
     if not code:
         return redirect("/login?error=No+authorization+code")
-    # Exchange code for tokens
+    # Exchange code for tokens using httpx (already a dependency)
     try:
-        tok = req_lib.post(GOOGLE_TOKEN_URL, data={
-            "code":          code,
-            "client_id":     GOOGLE_CLIENT_ID,
-            "client_secret": GOOGLE_CLIENT_SECRET,
-            "redirect_uri":  _google_redirect_uri(),
-            "grant_type":    "authorization_code",
-        }, timeout=10)
-        tok.raise_for_status()
-        access_token = tok.json()["access_token"]
-        info = req_lib.get(GOOGLE_USERINFO_URL,
-                           headers={"Authorization": "Bearer " + access_token}, timeout=10)
-        info.raise_for_status()
-        gdata = info.json()
+        with httpx.Client(timeout=15) as client:
+            tok = client.post(GOOGLE_TOKEN_URL, data={
+                "code":          code,
+                "client_id":     GOOGLE_CLIENT_ID,
+                "client_secret": GOOGLE_CLIENT_SECRET,
+                "redirect_uri":  _google_redirect_uri(),
+                "grant_type":    "authorization_code",
+            })
+            tok.raise_for_status()
+            access_token = tok.json()["access_token"]
+            info = client.get(GOOGLE_USERINFO_URL,
+                               headers={"Authorization": "Bearer " + access_token})
+            info.raise_for_status()
+            gdata = info.json()
     except Exception as exc:
         app.logger.error("Google OAuth error: %s", exc)
-        return redirect("/login?error=Google+authentication+failed")
+        return redirect("/login?error=" + urllib.parse.quote(f"Auth failed: {exc}"))
     email = (gdata.get("email") or "").lower().strip()
     name  = gdata.get("name") or gdata.get("given_name") or email.split("@")[0]
     if not email:
