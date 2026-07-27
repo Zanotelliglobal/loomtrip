@@ -579,25 +579,89 @@ label {
 
   <div class="sidebar-body">
 
-    <div class="section">
-      <label data-i18n="lbl_pdf">Itinerary PDF</label>
-      <div class="drop-zone" id="drop-zone" onclick="document.getElementById('pdf-input').click()">
-        <div class="drop-zone-icon">📄</div>
-        <div class="drop-zone-text" data-i18n="drop_pdf">Drop PDF here or <strong>browse</strong></div>
+    <!-- Mode switcher -->
+    <div style="display:flex;gap:4px;background:rgba(255,255,255,0.05);border-radius:8px;padding:3px;margin-bottom:16px;">
+      <button id="mode-btn-upload" onclick="setInputMode('upload')" style="flex:1;padding:7px 4px;border:none;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;transition:.15s;background:rgba(196,135,58,0.85);color:#fff;">📄 PDF / Text</button>
+      <button id="mode-btn-brief" onclick="setInputMode('brief')" style="flex:1;padding:7px 4px;border:none;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;transition:.15s;background:transparent;color:rgba(255,255,255,0.4);">✨ From Brief</button>
+    </div>
+
+    <!-- UPLOAD MODE -->
+    <div id="mode-upload">
+      <div class="section">
+        <label data-i18n="lbl_pdf">Itinerary PDF</label>
+        <div class="drop-zone" id="drop-zone" onclick="document.getElementById('pdf-input').click()">
+          <div class="drop-zone-icon">📄</div>
+          <div class="drop-zone-text" data-i18n="drop_pdf">Drop PDF here or <strong>browse</strong></div>
+        </div>
+        <input type="file" id="pdf-input" accept=".pdf" onchange="handleFile(this.files[0])">
+        <div id="pdf-pill" style="display:none;margin-top:6px;"></div>
       </div>
-      <input type="file" id="pdf-input" accept=".pdf" onchange="handleFile(this.files[0])">
-      <div id="pdf-pill" style="display:none;margin-top:6px;"></div>
+      <div class="divider">
+        <div class="divider-line"></div>
+        <div class="divider-text" data-i18n="or_paste">or paste text</div>
+        <div class="divider-line"></div>
+      </div>
+      <div class="section">
+        <label data-i18n="lbl_text">Itinerary Text</label>
+        <textarea id="itin-text" data-i18n-placeholder="placeholder_text" placeholder="Paste the DMC's itinerary here…"></textarea>
+      </div>
     </div>
 
-    <div class="divider">
-      <div class="divider-line"></div>
-      <div class="divider-text" data-i18n="or_paste">or paste text</div>
-      <div class="divider-line"></div>
-    </div>
-
-    <div class="section">
-      <label data-i18n="lbl_text">Itinerary Text</label>
-      <textarea id="itin-text" data-i18n-placeholder="placeholder_text" placeholder="Paste the DMC's itinerary here…"></textarea>
+    <!-- BRIEF MODE -->
+    <div id="mode-brief" style="display:none;">
+      <div class="section" style="display:flex;flex-direction:column;gap:10px;">
+        <div>
+          <label>Destination *</label>
+          <input type="text" id="b-dest" placeholder="e.g. Georgia, Caucasus" style="width:100%;padding:8px 10px;background:var(--sidebar-input-bg);border:1px solid var(--sidebar-input-border);border-radius:8px;color:var(--sidebar-text);font-size:13px;font-family:inherit;outline:none;">
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+          <div>
+            <label>Start date *</label>
+            <input type="text" id="b-start" placeholder="14 Jun 2026" style="width:100%;padding:8px 10px;background:var(--sidebar-input-bg);border:1px solid var(--sidebar-input-border);border-radius:8px;color:var(--sidebar-text);font-size:13px;font-family:inherit;outline:none;">
+          </div>
+          <div>
+            <label>End date *</label>
+            <input type="text" id="b-end" placeholder="21 Jun 2026" style="width:100%;padding:8px 10px;background:var(--sidebar-input-bg);border:1px solid var(--sidebar-input-border);border-radius:8px;color:var(--sidebar-text);font-size:13px;font-family:inherit;outline:none;">
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+          <div>
+            <label>Travelers</label>
+            <input type="text" id="b-travelers" placeholder="2 adults" style="width:100%;padding:8px 10px;background:var(--sidebar-input-bg);border:1px solid var(--sidebar-input-border);border-radius:8px;color:var(--sidebar-text);font-size:13px;font-family:inherit;outline:none;">
+          </div>
+          <div>
+            <label>Style</label>
+            <select id="b-style" style="width:100%;padding:8px 10px;background:var(--sidebar-input-bg);border:1px solid var(--sidebar-input-border);border-radius:8px;color:var(--sidebar-text);font-size:13px;font-family:inherit;outline:none;">
+              <option value="luxury">Luxury</option>
+              <option value="cultural">Cultural</option>
+              <option value="adventure">Adventure</option>
+              <option value="family">Family</option>
+              <option value="romantic">Romantic</option>
+              <option value="mixed">Mixed</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label>Key hotels (optional)</label>
+          <textarea id="b-hotels" placeholder="e.g. Night 1-3: Rooms Hotel Tbilisi&#10;Night 4-5: Lopota Lake Resort" style="width:100%;padding:8px 10px;background:var(--sidebar-input-bg);border:1px solid var(--sidebar-input-border);border-radius:8px;color:var(--sidebar-text);font-size:13px;font-family:inherit;outline:none;resize:vertical;min-height:64px;"></textarea>
+        </div>
+        <div>
+          <label>Special notes (optional)</label>
+          <textarea id="b-notes" placeholder="e.g. Client loves wine, avoid long drives, needs halal food" style="width:100%;padding:8px 10px;background:var(--sidebar-input-bg);border:1px solid var(--sidebar-input-border);border-radius:8px;color:var(--sidebar-text);font-size:13px;font-family:inherit;outline:none;resize:vertical;min-height:56px;"></textarea>
+        </div>
+        <button id="draft-btn" onclick="generateDraft()" style="width:100%;padding:10px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.12);border-radius:8px;color:var(--sidebar-text);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:.15s;" onmouseover="this.style.background='rgba(255,255,255,0.13)'" onmouseout="this.style.background='rgba(255,255,255,0.08)'">✨ Generate draft →</button>
+        <div id="draft-status" style="font-size:12px;color:var(--sidebar-muted);text-align:center;display:none;">Claude is writing your itinerary…</div>
+      </div>
+      <div class="divider" id="draft-divider" style="display:none;">
+        <div class="divider-line"></div>
+        <div class="divider-text">Edit draft</div>
+        <div class="divider-line"></div>
+      </div>
+      <div class="section" id="draft-text-section" style="display:none;">
+        <label>Itinerary Draft</label>
+        <textarea id="draft-text" style="width:100%;padding:8px 10px;background:var(--sidebar-input-bg);border:1px solid rgba(196,135,58,0.35);border-radius:8px;color:var(--sidebar-text);font-size:12px;font-family:inherit;outline:none;resize:vertical;min-height:180px;line-height:1.5;"></textarea>
+        <div style="font-size:11px;color:var(--sidebar-muted);margin-top:4px;">Review and edit above, then click Generate Trip below.</div>
+      </div>
     </div>
 
     <div class="section">
@@ -869,6 +933,56 @@ const ADMIN_I18N = {
 };
 
 let adminLang = localStorage.getItem('loomtrip_admin_lang') || 'en';
+
+// ─── Input mode switcher ─────────────────────────────────────────────────────
+let inputMode = 'upload';
+function setInputMode(mode) {
+  inputMode = mode;
+  document.getElementById('mode-upload').style.display = mode==='upload' ? '' : 'none';
+  document.getElementById('mode-brief').style.display  = mode==='brief'  ? '' : 'none';
+  const btnU = document.getElementById('mode-btn-upload');
+  const btnB = document.getElementById('mode-btn-brief');
+  btnU.style.background = mode==='upload' ? 'rgba(196,135,58,0.85)' : 'transparent';
+  btnU.style.color      = mode==='upload' ? '#fff' : 'rgba(255,255,255,0.4)';
+  btnB.style.background = mode==='brief'  ? 'rgba(196,135,58,0.85)' : 'transparent';
+  btnB.style.color      = mode==='brief'  ? '#fff' : 'rgba(255,255,255,0.4)';
+}
+
+// ─── Draft generation ─────────────────────────────────────────────────────────
+function generateDraft() {
+  const dest      = document.getElementById('b-dest').value.trim();
+  const startDate = document.getElementById('b-start').value.trim();
+  const endDate   = document.getElementById('b-end').value.trim();
+  if (!dest || !startDate || !endDate) { alert('Please fill in destination and dates.'); return; }
+  const btn = document.getElementById('draft-btn');
+  btn.disabled = true; btn.textContent = '⏳ Writing…';
+  document.getElementById('draft-status').style.display = 'block';
+  document.getElementById('draft-divider').style.display = 'none';
+  document.getElementById('draft-text-section').style.display = 'none';
+  const body = {
+    destination: dest,
+    start_date:  startDate,
+    end_date:    endDate,
+    travelers:   document.getElementById('b-travelers').value.trim(),
+    style:       document.getElementById('b-style').value,
+    hotels:      document.getElementById('b-hotels').value.trim(),
+    notes:       document.getElementById('b-notes').value.trim(),
+    lang:        document.getElementById('lang-select').value,
+    agency:      document.getElementById('agency-name').value.trim(),
+    client:      document.getElementById('client-name').value.trim(),
+  };
+  fetch('/api/draft', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)})
+    .then(r=>r.json())
+    .then(d=>{
+      btn.disabled=false; btn.textContent='✨ Regenerate draft →';
+      document.getElementById('draft-status').style.display='none';
+      if(d.error){ alert('Draft error: '+d.error); return; }
+      document.getElementById('draft-text').value = d.draft;
+      document.getElementById('draft-divider').style.display='';
+      document.getElementById('draft-text-section').style.display='';
+    })
+    .catch(e=>{ btn.disabled=false; btn.textContent='✨ Generate draft →'; document.getElementById('draft-status').style.display='none'; alert('Error: '+e); });
+}
 
 function logout() {
   fetch('/api/auth/logout', {method:'POST'}).then(()=>{ window.location.href='/login'; });
@@ -1144,8 +1258,15 @@ function toggleRawLog() {
 // ─── Generate ─────────────────────────────────────────────────────────────────
 let currentJobId = null;
 function startGenerate() {
-  const text = document.getElementById('itin-text').value.trim();
-  if (!pdfFile && !text) { alert('Please upload a PDF or paste an itinerary.'); return; }
+  // Resolve text based on input mode
+  let text = '';
+  if (inputMode === 'brief') {
+    text = document.getElementById('draft-text').value.trim();
+    if (!text) { alert('Please generate a draft first, then edit it if needed.'); return; }
+  } else {
+    text = document.getElementById('itin-text').value.trim();
+    if (!pdfFile && !text) { alert('Please upload a PDF or paste an itinerary.'); return; }
+  }
 
   const btn = document.getElementById('generate-btn');
   btn.disabled = true;
@@ -1400,6 +1521,9 @@ function clearEdit() {
   editingBuildId = null;
   document.getElementById('edit-banner').style.display = 'none';
   document.getElementById('itin-text').value = '';
+  document.getElementById('draft-text').value = '';
+  document.getElementById('draft-divider').style.display = 'none';
+  document.getElementById('draft-text-section').style.display = 'none';
   clearPdf();
 }
 
@@ -2159,6 +2283,81 @@ def api_signup():
 def api_logout():
     session.clear()
     return jsonify({"ok": True})
+
+@app.route("/api/draft", methods=["POST"])
+@require_login
+def generate_draft():
+    data        = request.get_json(silent=True) or {}
+    destination = data.get("destination", "").strip()
+    start_date  = data.get("start_date", "").strip()
+    end_date    = data.get("end_date", "").strip()
+    travelers   = data.get("travelers", "2 adults").strip()
+    style       = data.get("style", "luxury").strip()
+    hotels      = data.get("hotels", "").strip()
+    notes       = data.get("notes", "").strip()
+    lang        = data.get("lang", "en").strip() or "en"
+    agency      = data.get("agency", "").strip()
+    client      = data.get("client", "").strip()
+
+    if not destination or not start_date or not end_date:
+        return jsonify({"error": "destination, start_date and end_date are required"}), 400
+
+    lang_names = {"en": "English", "it": "Italian", "fr": "French"}
+    lang_name  = lang_names.get(lang, "English")
+
+    hotels_line = f"\nKey hotels:\n{hotels}" if hotels else ""
+    notes_line  = f"\nSpecial requests / notes:\n{notes}" if notes else ""
+    agency_line = f"\nDMC / Agency: {agency}" if agency else ""
+    client_line = f"\nClient: {client}" if client else ""
+
+    prompt = f"""You are a luxury DMC creating a detailed travel itinerary.
+Write a complete, realistic itinerary in {lang_name} for the following trip:
+
+Destination: {destination}
+Dates: {start_date} → {end_date}
+Travelers: {travelers}
+Travel style: {style}{agency_line}{client_line}{hotels_line}{notes_line}
+
+Write a day-by-day itinerary in plain text (no JSON, no markdown headers with #).
+Format each day like this:
+
+DAY 1 — [Day title]
+[Date, e.g. Friday 14 June 2026]
+Stats: ~[distance] km · [transport type]
+Hotel: [hotel name], [city]
+
+Timeline:
+07:10 — Departure from [origin] ([flight or transport details])
+13:25 — Arrival in [city]. [Brief activity description.]
+Afternoon — [Activity]
+Evening — [Activity / dinner]
+
+[Add a short tips box if relevant, e.g. "Tip: Book the wine tasting in advance."]
+
+---
+
+DAY 2 — ...
+
+Include all days from {start_date} to {end_date}.
+Be specific, realistic and evocative. Include actual timings where logical.
+For flights, invent plausible flight numbers and times.
+For hotels, use the hotels provided if given, otherwise invent plausible luxury options.
+End with a CONTACTS section listing DMC office and local guide contacts (invent realistic ones).
+Write in {lang_name}.
+"""
+
+    try:
+        api_key = os.environ.get("ANTHROPIC_API_KEY")
+        ai = anthropic.Anthropic(api_key=api_key, http_client=httpx.Client(verify=False))
+        msg = ai.messages.create(
+            model="claude-opus-4-5",
+            max_tokens=4096,
+            messages=[{"role": "user", "content": prompt}]
+        )
+        draft = msg.content[0].text.strip()
+        return jsonify({"draft": draft})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 # ─── run ─────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
