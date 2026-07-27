@@ -11,19 +11,20 @@ Usage:
 Requires: Flask, PyMuPDF, anthropic (all in deps/)
 """
 
-import sys, os, json, re, subprocess, threading, time, shutil, uuid
+import sys, os, json, re, subprocess, threading, time, shutil, uuid, sqlite3, hashlib, secrets
 from pathlib import Path
 
 _deps = os.path.join(os.path.dirname(os.path.abspath(__file__)), "deps")
 if os.path.isdir(_deps) and _deps not in sys.path:
     sys.path.insert(0, _deps)
 
-from flask import Flask, request, jsonify, send_from_directory, render_template_string, Response
+from flask import Flask, request, jsonify, send_from_directory, render_template_string, Response, session, redirect, url_for
 from functools import wraps
 import anthropic, httpx
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 20 * 1024 * 1024  # 20 MB upload limit
+app.secret_key = os.environ.get("LOOMTRIP_SECRET", secrets.token_hex(32))
 
 BASE_DIR   = Path(__file__).parent
 # LOOMTRIP_BUILDS_DIR lets you point to a persistent volume on Render
@@ -31,21 +32,54 @@ BASE_DIR   = Path(__file__).parent
 BUILDS_DIR = Path(os.environ.get("LOOMTRIP_BUILDS_DIR", str(BASE_DIR / "builds")))
 BUILDS_DIR.mkdir(parents=True, exist_ok=True)
 
-# ─── Admin auth ───────────────────────────────────────────────────────────────
-ADMIN_USER = os.environ.get("ADMIN_USER", "admin")
-ADMIN_PASS = os.environ.get("ADMIN_PASS", "")
+# ─── User DB (SQLite on persistent disk) ─────────────────────────────────────
+DB_PATH = BUILDS_DIR.parent / "users.db"
 
-def require_admin(f):
+def _db():
+    con = sqlite3.connect(str(DB_PATH))
+    con.row_factory = sqlite3.Row
+    return con
+
+def _init_db():
+    with _db() as con:
+        con.execute("""CREATE TABLE IF NOT EXISTS users (
+            id       TEXT PRIMARY KEY,
+            email    TEXT UNIQUE NOT NULL,
+            name     TEXT NOT NULL,
+            pw_hash  TEXT NOT NULL,
+            created  TEXT NOT NULL
+        )""")
+        con.commit()
+
+_init_db()
+
+def _hash_pw(password: str) -> str:
+    return hashlib.sha256(password.encode()).hexdigest()
+
+def _get_user(email: str):
+    with _db() as con:
+        return con.execute("SELECT * FROM users WHERE email=?", (email.lower(),)).fetchone()
+
+def _get_user_by_id(uid: str):
+    with _db() as con:
+        return con.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone()
+
+# ─── Auth helpers ─────────────────────────────────────────────────────────────
+def current_user_id():
+    return session.get("user_id")
+
+def require_login(f):
     @wraps(f)
     def decorated(*args, **kwargs):
-        if not ADMIN_PASS:
-            return f(*args, **kwargs)  # no password set → open (local dev)
-        auth = request.authorization
-        if not auth or auth.username != ADMIN_USER or auth.password != ADMIN_PASS:
-            return Response("Unauthorised", 401,
-                            {"WWW-Authenticate": 'Basic realm="Loomtrip Admin"'})
+        if not current_user_id():
+            if request.path.startswith("/api/"):
+                return jsonify({"error": "Not authenticated"}), 401
+            return redirect("/login")
         return f(*args, **kwargs)
     return decorated
+
+# keep old name as alias for any remaining usage
+require_admin = require_login
 
 # ─── in-memory job store ─────────────────────────────────────────────────────
 jobs = {}  # job_id → {status, log, output_dir}
@@ -523,7 +557,10 @@ label {
 <!-- ── SIDEBAR ── -->
 <aside class="sidebar">
   <div class="sidebar-header">
-    <div class="wordmark">Loomtrip</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;">
+      <div class="wordmark">Loomtrip</div>
+      <button onclick="logout()" style="font-size:11px;color:rgba(255,255,255,0.3);background:none;border:none;cursor:pointer;padding:4px 6px;border-radius:6px;font-family:inherit;transition:.15s;" onmouseover="this.style.color='rgba(255,255,255,0.7)'" onmouseout="this.style.color='rgba(255,255,255,0.3)'">Sign out</button>
+    </div>
     <div style="display:flex;align-items:center;justify-content:space-between;">
       <div class="wordmark-sub" data-i18n="studio">Trip Studio</div>
       <div id="admin-lang-switcher" style="display:flex;gap:2px;background:rgba(255,255,255,0.06);border-radius:6px;padding:2px;">
@@ -832,6 +869,10 @@ const ADMIN_I18N = {
 };
 
 let adminLang = localStorage.getItem('loomtrip_admin_lang') || 'en';
+
+function logout() {
+  fetch('/api/auth/logout', {method:'POST'}).then(()=>{ window.location.href='/login'; });
+}
 
 function setAdminLang(l) {
   adminLang = l;
@@ -1374,7 +1415,7 @@ setInterval(loadBuilds, 10000);
 @require_admin
 def generate():
     job_id = str(uuid.uuid4())[:8]
-    jobs[job_id] = {"status": "running", "log": [], "output_dir": None}
+    jobs[job_id] = {"status": "running", "log": [], "output_dir": None, "user_id": current_user_id()}
 
     # Save uploaded PDF or text
     pdf_file = request.files.get("pdf")
@@ -1476,6 +1517,7 @@ def generate():
                     "extra_descriptions": extra_descriptions,
                     "extra_packing": extra_packing,
                     "extra_vocabulary": extra_vocabulary,
+                    "user_id": jobs[job_id].get("user_id"),
                 }
                 (dest / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2))
             except Exception: pass
@@ -1557,6 +1599,10 @@ def list_builds():
         if meta_file.exists():
             try: meta = json.loads(meta_file.read_text())
             except: pass
+        # Filter: only show this user's builds (legacy builds with no user_id visible to all)
+        build_user = meta.get("user_id")
+        if build_user and build_user != current_user_id():
+            continue
         # Extract destination from HTML title
         mt = re.search(r'<title>([^<]+)</title>', content)
         destination = mt.group(1).strip() if mt else ""
@@ -1955,10 +2001,164 @@ def favicon():
     return Response(svg, mimetype="image/svg+xml")
 
 @app.route("/admin")
-@require_admin
+@require_login
 def admin():
     """Admin dashboard — internal use only."""
     return render_template_string(DASHBOARD_HTML)
+
+# ─── Auth routes ─────────────────────────────────────────────────────────────
+AUTH_HTML = r"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Loomtrip</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Playfair+Display:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{min-height:100vh;background:#0F0E0D;display:flex;align-items:center;justify-content:center;font-family:'Inter',-apple-system,sans-serif;padding:24px}
+.card{background:#1a1917;border:1px solid rgba(255,255,255,0.08);border-radius:20px;padding:48px 40px;width:100%;max-width:420px;box-shadow:0 32px 80px rgba(0,0,0,0.5)}
+.logo{font-family:'Playfair Display',Georgia,serif;font-size:28px;color:#fff;text-align:center;letter-spacing:-0.5px;margin-bottom:8px}
+.logo span{color:#C4873A}
+.tagline{text-align:center;color:rgba(255,255,255,0.38);font-size:13px;margin-bottom:36px}
+.tabs{display:flex;background:rgba(255,255,255,0.05);border-radius:10px;padding:4px;margin-bottom:32px;gap:4px}
+.tab{flex:1;text-align:center;padding:9px;border-radius:7px;font-size:13px;font-weight:500;color:rgba(255,255,255,0.45);cursor:pointer;transition:.15s;border:none;background:none}
+.tab.active{background:rgba(196,135,58,0.85);color:#fff}
+.form{display:none;flex-direction:column;gap:16px}
+.form.active{display:flex}
+label{font-size:12px;font-weight:500;color:rgba(255,255,255,0.5);letter-spacing:.04em;text-transform:uppercase;margin-bottom:4px;display:block}
+input{width:100%;padding:12px 14px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.10);border-radius:10px;color:#fff;font-size:14px;font-family:inherit;outline:none;transition:.15s}
+input:focus{border-color:rgba(196,135,58,0.6);background:rgba(255,255,255,0.09)}
+input::placeholder{color:rgba(255,255,255,0.25)}
+.btn{width:100%;padding:13px;background:#C4873A;border:none;border-radius:10px;color:#fff;font-size:14px;font-weight:600;cursor:pointer;margin-top:4px;font-family:inherit;transition:.15s;letter-spacing:.01em}
+.btn:hover{background:#d4974a}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.err{color:#e05252;font-size:13px;text-align:center;padding:10px;background:rgba(224,82,82,0.08);border-radius:8px;display:none}
+.err.show{display:block}
+.divider{text-align:center;color:rgba(255,255,255,0.2);font-size:12px;margin:4px 0}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">Loom<span>trip</span></div>
+  <div class="tagline">Luxury travel, beautifully presented</div>
+
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('login')">Sign in</button>
+    <button class="tab" onclick="switchTab('signup')">Create account</button>
+  </div>
+
+  <div id="err" class="err"></div>
+
+  <!-- LOGIN -->
+  <form id="form-login" class="form active" onsubmit="submit(event,'login')">
+    <div>
+      <label>Email</label>
+      <input type="email" id="l-email" placeholder="you@agency.com" autocomplete="email" required>
+    </div>
+    <div>
+      <label>Password</label>
+      <input type="password" id="l-pass" placeholder="••••••••" autocomplete="current-password" required>
+    </div>
+    <button class="btn" id="btn-login" type="submit">Sign in →</button>
+  </form>
+
+  <!-- SIGNUP -->
+  <form id="form-signup" class="form" onsubmit="submit(event,'signup')">
+    <div>
+      <label>Your name</label>
+      <input type="text" id="s-name" placeholder="Sofia Rossi" autocomplete="name" required>
+    </div>
+    <div>
+      <label>Email</label>
+      <input type="email" id="s-email" placeholder="you@agency.com" autocomplete="email" required>
+    </div>
+    <div>
+      <label>Password</label>
+      <input type="password" id="s-pass" placeholder="Min. 8 characters" autocomplete="new-password" required minlength="8">
+    </div>
+    <button class="btn" id="btn-signup" type="submit">Create account →</button>
+  </form>
+</div>
+<script>
+function switchTab(t) {
+  document.querySelectorAll('.tab').forEach((b,i)=>b.classList.toggle('active', (i===0&&t==='login')||(i===1&&t==='signup')));
+  document.getElementById('form-login').classList.toggle('active', t==='login');
+  document.getElementById('form-signup').classList.toggle('active', t==='signup');
+  document.getElementById('err').classList.remove('show');
+}
+function showErr(msg) {
+  const e = document.getElementById('err');
+  e.textContent = msg; e.classList.add('show');
+}
+function submit(ev, type) {
+  ev.preventDefault();
+  const btn = document.getElementById('btn-'+type);
+  btn.disabled = true; btn.textContent = 'Please wait…';
+  document.getElementById('err').classList.remove('show');
+  const body = type==='login'
+    ? {email: document.getElementById('l-email').value, password: document.getElementById('l-pass').value}
+    : {name: document.getElementById('s-name').value, email: document.getElementById('s-email').value, password: document.getElementById('s-pass').value};
+  fetch('/api/auth/'+type, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)})
+    .then(r=>r.json())
+    .then(d=>{
+      if(d.error){ showErr(d.error); btn.disabled=false; btn.textContent=type==='login'?'Sign in →':'Create account →'; }
+      else { window.location.href='/admin'; }
+    })
+    .catch(()=>{ showErr('Network error — please try again.'); btn.disabled=false; btn.textContent=type==='login'?'Sign in →':'Create account →'; });
+}
+const p = new URLSearchParams(location.search);
+if(p.get('tab')==='signup') switchTab('signup');
+</script>
+</body>
+</html>"""
+
+@app.route("/login")
+def login_page():
+    if current_user_id():
+        return redirect("/admin")
+    return render_template_string(AUTH_HTML)
+
+@app.route("/api/auth/login", methods=["POST"])
+def api_login():
+    data = request.get_json(silent=True) or {}
+    email = (data.get("email") or "").strip().lower()
+    password = data.get("password") or ""
+    if not email or not password:
+        return jsonify({"error": "Email and password required"}), 400
+    user = _get_user(email)
+    if not user or user["pw_hash"] != _hash_pw(password):
+        return jsonify({"error": "Incorrect email or password"}), 401
+    session["user_id"] = user["id"]
+    session["user_name"] = user["name"]
+    return jsonify({"ok": True})
+
+@app.route("/api/auth/signup", methods=["POST"])
+def api_signup():
+    data = request.get_json(silent=True) or {}
+    name     = (data.get("name") or "").strip()
+    email    = (data.get("email") or "").strip().lower()
+    password = data.get("password") or ""
+    if not name or not email or not password:
+        return jsonify({"error": "All fields required"}), 400
+    if len(password) < 8:
+        return jsonify({"error": "Password must be at least 8 characters"}), 400
+    if _get_user(email):
+        return jsonify({"error": "An account with this email already exists"}), 409
+    uid = str(uuid.uuid4())
+    with _db() as con:
+        con.execute("INSERT INTO users (id,email,name,pw_hash,created) VALUES (?,?,?,?,?)",
+                    (uid, email, name, _hash_pw(password), time.strftime("%Y-%m-%dT%H:%M:%SZ")))
+        con.commit()
+    session["user_id"] = uid
+    session["user_name"] = name
+    return jsonify({"ok": True})
+
+@app.route("/api/auth/logout", methods=["POST"])
+def api_logout():
+    session.clear()
+    return jsonify({"ok": True})
 
 # ─── run ─────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
