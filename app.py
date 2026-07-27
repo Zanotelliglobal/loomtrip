@@ -25,6 +25,9 @@ import anthropic, httpx
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 20 * 1024 * 1024  # 20 MB upload limit
 app.secret_key = os.environ.get("LOOMTRIP_SECRET", secrets.token_hex(32))
+app.config["PERMANENT_SESSION_LIFETIME"] = 30 * 24 * 3600  # 30 days
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config["SESSION_COOKIE_SECURE"] = True
 
 BASE_DIR   = Path(__file__).parent
 # LOOMTRIP_BUILDS_DIR lets you point to a persistent volume on Render
@@ -2254,6 +2257,7 @@ def api_login():
     user = _get_user(email)
     if not user or user["pw_hash"] != _hash_pw(password):
         return jsonify({"error": "Incorrect email or password"}), 401
+    session.permanent = True
     session["user_id"] = user["id"]
     session["user_name"] = user["name"]
     return jsonify({"ok": True})
@@ -2275,6 +2279,7 @@ def api_signup():
         con.execute("INSERT INTO users (id,email,name,pw_hash,created) VALUES (?,?,?,?,?)",
                     (uid, email, name, _hash_pw(password), time.strftime("%Y-%m-%dT%H:%M:%SZ")))
         con.commit()
+    session.permanent = True
     session["user_id"] = uid
     session["user_name"] = name
     return jsonify({"ok": True})
