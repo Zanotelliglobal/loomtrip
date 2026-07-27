@@ -2049,16 +2049,7 @@ html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFo
 }
 
 /* ── DESTINATION LABEL ── */
-.dest-label{
-  position:fixed;bottom:32px;left:50%;transform:translateX(-50%);
-  font-size:11px;letter-spacing:2px;text-transform:uppercase;
-  color:rgba(255,255,255,0.45);
-  background:rgba(0,0,0,0.25);
-  backdrop-filter:blur(8px);
-  padding:6px 16px;border-radius:20px;
-  transition:opacity 0.8s ease;
-  white-space:nowrap;
-}
+.dest-label{ display:none; }
 
 /* ── SPINNER ── */
 @keyframes spin{to{transform:rotate(360deg)}}
@@ -2103,16 +2094,16 @@ html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFo
 
 <script>
 const SCENES = [
-  {url:'https://images.unsplash.com/photo-1565008887967-af5ab3adcbe9?w=1920&q=80&fit=crop',label:'Tbilisi, Georgia'},
-  {url:'https://images.unsplash.com/photo-1533105079780-92b9be482077?w=1920&q=80&fit=crop',label:'Santorini, Greece'},
-  {url:'https://images.unsplash.com/photo-1467269204594-9661b134dd2b?w=1920&q=80&fit=crop',label:'Tuscany, Italy'},
-  {url:'https://images.unsplash.com/photo-1476610182048-b716b8518aae?w=1920&q=80&fit=crop',label:'Iceland'},
-  {url:'https://images.unsplash.com/photo-1514282401047-d79a71a590e8?w=1920&q=80&fit=crop',label:'Maldives'},
-  {url:'https://images.unsplash.com/photo-1512100356356-de1b84283e18?w=1920&q=80&fit=crop',label:'Cinque Terre, Italy'},
-  {url:'https://images.unsplash.com/photo-1542293787938-c9e299b880cc?w=1920&q=80&fit=crop',label:'Cappadocia, Turkey'},
-  {url:'https://images.unsplash.com/photo-1528360983277-13d401cdc186?w=1920&q=80&fit=crop',label:'Amalfi Coast, Italy'},
-  {url:'https://images.unsplash.com/photo-1548013146-72479768bada?w=1920&q=80&fit=crop',label:'Taj Mahal, India'},
-  {url:'https://images.unsplash.com/photo-1553913861-c0fddf2619ee?w=1920&q=80&fit=crop',label:'Machu Picchu, Peru'},
+  {url:'https://images.unsplash.com/photo-1533105079780-92b9be482077?auto=format&w=1920&q=75&fit=crop&crop=entropy'},
+  {url:'https://images.unsplash.com/photo-1467269204594-9661b134dd2b?auto=format&w=1920&q=75&fit=crop&crop=entropy'},
+  {url:'https://images.unsplash.com/photo-1476610182048-b716b8518aae?auto=format&w=1920&q=75&fit=crop&crop=entropy'},
+  {url:'https://images.unsplash.com/photo-1514282401047-d79a71a590e8?auto=format&w=1920&q=75&fit=crop&crop=entropy'},
+  {url:'https://images.unsplash.com/photo-1542293787938-c9e299b880cc?auto=format&w=1920&q=75&fit=crop&crop=entropy'},
+  {url:'https://images.unsplash.com/photo-1528360983277-13d401cdc186?auto=format&w=1920&q=75&fit=crop&crop=entropy'},
+  {url:'https://images.unsplash.com/photo-1548013146-72479768bada?auto=format&w=1920&q=75&fit=crop&crop=entropy'},
+  {url:'https://images.unsplash.com/photo-1553913861-c0fddf2619ee?auto=format&w=1920&q=75&fit=crop&crop=entropy'},
+  {url:'https://images.unsplash.com/photo-1520250497591-112f2f40a3f4?auto=format&w=1920&q=75&fit=crop&crop=entropy'},
+  {url:'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&w=1920&q=75&fit=crop&crop=entropy'},
 ];
 
 // Shuffle
@@ -2226,34 +2217,44 @@ AUTH_HTML = r"""<!DOCTYPE html>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Playfair+Display:wght@400;500&display=swap" rel="stylesheet">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{min-height:100vh;background:#0F0E0D;display:flex;align-items:center;justify-content:center;font-family:'Inter',-apple-system,sans-serif;padding:24px}
-.card{background:#1a1917;border:1px solid rgba(255,255,255,0.08);border-radius:20px;padding:48px 40px;width:100%;max-width:420px;box-shadow:0 32px 80px rgba(0,0,0,0.5)}
+html,body{height:100%;overflow:hidden;font-family:'Inter',-apple-system,sans-serif}
+/* ── BACKGROUND ── */
+.bg-stage{position:fixed;inset:0;z-index:0;background:#111}
+.bg-slide{position:absolute;inset:0;background-size:cover;background-position:center;opacity:0;transition:opacity 2s ease-in-out}
+.bg-slide.active{opacity:1}
+.bg-overlay{position:absolute;inset:0;background:linear-gradient(160deg,rgba(0,0,0,0.55) 0%,rgba(0,0,0,0.35) 50%,rgba(0,0,0,0.65) 100%)}
+/* ── LAYOUT ── */
+.stage{position:relative;z-index:1;height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+/* ── CARD ── */
+.card{background:rgba(15,14,13,0.72);border:1px solid rgba(255,255,255,0.12);border-radius:20px;padding:40px 36px;width:100%;max-width:420px;box-shadow:0 32px 80px rgba(0,0,0,0.5);backdrop-filter:blur(28px) saturate(160%);-webkit-backdrop-filter:blur(28px) saturate(160%)}
 .logo{font-family:'Playfair Display',Georgia,serif;font-size:28px;color:#fff;text-align:center;letter-spacing:-0.5px;margin-bottom:8px}
 .logo span{color:#C4873A}
-.tagline{text-align:center;color:rgba(255,255,255,0.38);font-size:13px;margin-bottom:32px}
+.tagline{text-align:center;color:rgba(255,255,255,0.45);font-size:13px;margin-bottom:28px}
 .google-btn{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;padding:12px;background:#fff;border:none;border-radius:10px;color:#1f1f1f;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit;transition:.15s;text-decoration:none;margin-bottom:20px}
 .google-btn:hover{background:#f1f1f1;box-shadow:0 2px 8px rgba(0,0,0,0.25)}
 .google-btn svg{width:20px;height:20px;flex-shrink:0}
 .divider-row{display:flex;align-items:center;gap:12px;margin-bottom:20px}
-.divider-row hr{flex:1;border:none;border-top:1px solid rgba(255,255,255,0.1)}
-.divider-row span{color:rgba(255,255,255,0.25);font-size:12px;white-space:nowrap}
-.tabs{display:flex;background:rgba(255,255,255,0.05);border-radius:10px;padding:4px;margin-bottom:24px;gap:4px}
+.divider-row hr{flex:1;border:none;border-top:1px solid rgba(255,255,255,0.12)}
+.divider-row span{color:rgba(255,255,255,0.3);font-size:12px;white-space:nowrap}
+.tabs{display:flex;background:rgba(255,255,255,0.06);border-radius:10px;padding:4px;margin-bottom:24px;gap:4px}
 .tab{flex:1;text-align:center;padding:9px;border-radius:7px;font-size:13px;font-weight:500;color:rgba(255,255,255,0.45);cursor:pointer;transition:.15s;border:none;background:none}
 .tab.active{background:rgba(196,135,58,0.85);color:#fff}
 .form{display:none;flex-direction:column;gap:16px}
 .form.active{display:flex}
 label{font-size:12px;font-weight:500;color:rgba(255,255,255,0.5);letter-spacing:.04em;text-transform:uppercase;margin-bottom:4px;display:block}
-input{width:100%;padding:12px 14px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.10);border-radius:10px;color:#fff;font-size:14px;font-family:inherit;outline:none;transition:.15s}
-input:focus{border-color:rgba(196,135,58,0.6);background:rgba(255,255,255,0.09)}
+input{width:100%;padding:12px 14px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);border-radius:10px;color:#fff;font-size:14px;font-family:inherit;outline:none;transition:.15s}
+input:focus{border-color:rgba(196,135,58,0.6);background:rgba(255,255,255,0.10)}
 input::placeholder{color:rgba(255,255,255,0.25)}
 .btn{width:100%;padding:13px;background:#C4873A;border:none;border-radius:10px;color:#fff;font-size:14px;font-weight:600;cursor:pointer;margin-top:4px;font-family:inherit;transition:.15s;letter-spacing:.01em}
 .btn:hover{background:#d4974a}
 .btn:disabled{opacity:.5;cursor:not-allowed}
-.err{color:#e05252;font-size:13px;text-align:center;padding:10px;background:rgba(224,82,82,0.08);border-radius:8px;display:none;margin-bottom:8px}
+.err{color:#ff9a9a;font-size:13px;text-align:center;padding:10px;background:rgba(224,82,82,0.12);border-radius:8px;display:none;margin-bottom:8px}
 .err.show{display:block}
 </style>
 </head>
 <body>
+<div class="bg-stage" id="bgStage"></div>
+<div class="stage">
 <div class="card">
   <div class="logo">Loom<span>trip</span></div>
   <div class="tagline">Luxury travel, beautifully presented</div>
@@ -2339,7 +2340,35 @@ function doAuth(ev, type) {
 const p = new URLSearchParams(location.search);
 if(p.get('tab')==='signup') switchTab('signup');
 if(p.get('error')) showErr(decodeURIComponent(p.get('error')));
+
+// ── Slideshow (same scenes as landing page) ──
+const AUTH_SCENES = [
+  'https://images.unsplash.com/photo-1533105079780-92b9be482077?auto=format&w=1920&q=75&fit=crop&crop=entropy',
+  'https://images.unsplash.com/photo-1467269204594-9661b134dd2b?auto=format&w=1920&q=75&fit=crop&crop=entropy',
+  'https://images.unsplash.com/photo-1476610182048-b716b8518aae?auto=format&w=1920&q=75&fit=crop&crop=entropy',
+  'https://images.unsplash.com/photo-1514282401047-d79a71a590e8?auto=format&w=1920&q=75&fit=crop&crop=entropy',
+  'https://images.unsplash.com/photo-1542293787938-c9e299b880cc?auto=format&w=1920&q=75&fit=crop&crop=entropy',
+  'https://images.unsplash.com/photo-1528360983277-13d401cdc186?auto=format&w=1920&q=75&fit=crop&crop=entropy',
+  'https://images.unsplash.com/photo-1548013146-72479768bada?auto=format&w=1920&q=75&fit=crop&crop=entropy',
+  'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&w=1920&q=75&fit=crop&crop=entropy',
+];
+(function(){
+  const st = document.getElementById('bgStage');
+  if(!st) return;
+  const ov = document.createElement('div');
+  ov.style.cssText='position:absolute;inset:0;background:linear-gradient(160deg,rgba(0,0,0,0.55) 0%,rgba(0,0,0,0.35) 50%,rgba(0,0,0,0.65) 100%)';
+  st.appendChild(ov);
+  const slides = AUTH_SCENES.map(url => {
+    const d = document.createElement('div');
+    d.className = 'bg-slide';
+    d.style.backgroundImage = 'url(' + url + ')';
+    st.appendChild(d); return d;
+  });
+  const chosen = Math.floor(Math.random() * slides.length);
+  slides[chosen].classList.add('active');
+})();
 </script>
+</div></div>
 </body>
 </html>"""
 
