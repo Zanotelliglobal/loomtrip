@@ -130,7 +130,19 @@ body { font-family: var(--sans); background: var(--main-bg); color: var(--text);
   display: flex; flex-direction: column;
   position: sticky; top: 0; height: 100vh; overflow-y: auto;
   border-right: 1px solid var(--sidebar-border);
+  transition: width 0.25s, min-width 0.25s;
 }
+.sidebar.collapsed { width: 0; min-width: 0; overflow: hidden; border-right: none; }
+.sidebar-toggle-btn {
+  position: fixed; top: 18px; left: 18px; z-index: 200;
+  width: 32px; height: 32px; border-radius: 8px;
+  background: var(--sidebar-bg); border: 1px solid var(--sidebar-border);
+  color: rgba(255,255,255,0.6); cursor: pointer; font-size: 14px;
+  display: none; align-items: center; justify-content: center;
+  transition: .15s;
+}
+.sidebar-toggle-btn.show { display: flex; }
+.sidebar-toggle-btn:hover { color: #fff; background: rgba(255,255,255,0.08); }
 .sidebar-header {
   padding: 28px 28px 20px;
   border-bottom: 1px solid var(--sidebar-border);
@@ -387,8 +399,8 @@ label {
 .trip-table { width: 100%; border-collapse: collapse; }
 .trip-table-head {
   display: grid;
-  grid-template-columns: 32px 1fr 160px 56px 80px 90px 32px;
-  padding: 0 12px 0 8px;
+  grid-template-columns: 32px 1fr 140px 56px 70px 110px 110px;
+  padding: 0 8px;
   border-bottom: 2px solid var(--border);
   margin-bottom: 0;
 }
@@ -400,14 +412,14 @@ label {
 }
 .trip-row {
   display: grid;
-  grid-template-columns: 32px 1fr 160px 56px 80px 90px 32px;
+  grid-template-columns: 32px 1fr 140px 56px 70px 110px 110px;
   align-items: center;
-  padding: 0 12px 0 8px;
+  padding: 0 8px;
   border-bottom: 1px solid var(--border);
   cursor: default;
   transition: background 0.1s;
   position: relative;
-  min-height: 48px;
+  min-height: 52px;
 }
 .trip-row:hover { background: rgba(196,135,58,0.04); }
 .trip-row:hover .row-actions { opacity: 1; }
@@ -557,8 +569,9 @@ label {
 </head>
 <body>
 
+<button class="sidebar-toggle-btn" id="sidebar-toggle-btn" onclick="toggleSidebar()" title="Toggle sidebar">☰</button>
 <!-- ── SIDEBAR ── -->
-<aside class="sidebar">
+<aside class="sidebar" id="sidebar">
   <div class="sidebar-header">
     <div style="display:flex;align-items:center;justify-content:space-between;">
       <div class="wordmark">Loomtrip</div>
@@ -653,7 +666,7 @@ label {
           <textarea id="b-notes" placeholder="e.g. Client loves wine, avoid long drives, needs halal food" style="width:100%;padding:8px 10px;background:var(--sidebar-input-bg);border:1px solid var(--sidebar-input-border);border-radius:8px;color:var(--sidebar-text);font-size:13px;font-family:inherit;outline:none;resize:vertical;min-height:56px;"></textarea>
         </div>
         <button id="draft-btn" onclick="generateDraft()" style="width:100%;padding:10px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.12);border-radius:8px;color:var(--sidebar-text);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:.15s;" onmouseover="this.style.background='rgba(255,255,255,0.13)'" onmouseout="this.style.background='rgba(255,255,255,0.08)'">✨ Generate draft →</button>
-        <div id="draft-status" style="font-size:12px;color:var(--sidebar-muted);text-align:center;display:none;">Claude is writing your itinerary…</div>
+        <div id="draft-status" style="font-size:12px;color:var(--sidebar-muted);text-align:center;display:none;">Loomtrip is writing your itinerary…</div>
       </div>
       <div class="divider" id="draft-divider" style="display:none;">
         <div class="divider-line"></div>
@@ -683,7 +696,7 @@ label {
 
     <div class="section">
       <label data-i18n="lbl_client">Client Name</label>
-      <input type="text" id="client-name" data-i18n-placeholder="placeholder_client" placeholder="e.g. The Zanotelli Family">
+      <input type="text" id="client-name" data-i18n-placeholder="placeholder_client" placeholder="e.g. The Smith Family">
     </div>
 
     <div class="section">
@@ -833,7 +846,7 @@ const ADMIN_I18N = {
     lbl_pdf:'Itinerary PDF', drop_pdf:'Drop PDF here or <strong>browse</strong>', or_paste:'or paste text',
     lbl_text:'Itinerary Text', placeholder_text:'Paste the DMC\'s itinerary here…',
     lbl_color:'Brand Colour', lbl_trip_name:'Trip Name', placeholder_trip_name:'e.g. Georgia: Caucasus Highlights',
-    lbl_client:'Client Name', placeholder_client:'e.g. The Zanotelli Family',
+    lbl_client:'Client Name', placeholder_client:'e.g. The Smith Family',
     lbl_agency:'Agency / DMC Name', placeholder_agency:'Leave blank to auto-detect from PDF',
     lbl_logo:'Agency Logo URL', lbl_lang:'Language', lbl_voice:'Voice',
     lang_en:'English', lang_it:'Italian', lang_fr:'French', lang_auto:'Auto-detect from PDF',
@@ -859,7 +872,7 @@ const ADMIN_I18N = {
     ps_waiting:'Waiting…', ps_sending:'Sending to server…', ps_complete:'Complete',
     ps_failed:'Failed — check raw log', ps_ready:'Trip app ready ✓',
     ps_stall_12:'Still working…',
-    ps_stall_30:'Claude is thinking, please wait…',
+    ps_stall_30:'Loomtrip is thinking, please wait…',
     ps_stall_60:'This can take a minute, almost there…',
     ps_stall_120:'Large file or many extras — still running…',
   },
@@ -868,7 +881,7 @@ const ADMIN_I18N = {
     lbl_pdf:'PDF Itinerario', drop_pdf:'Trascina il PDF qui o <strong>sfoglia</strong>', or_paste:'o incolla il testo',
     lbl_text:'Testo Itinerario', placeholder_text:'Incolla qui l\'itinerario del DMC…',
     lbl_color:'Colore Brand', lbl_trip_name:'Nome Viaggio', placeholder_trip_name:'es. Georgia: Highlights del Caucaso',
-    lbl_client:'Nome Cliente', placeholder_client:'es. Famiglia Zanotelli',
+    lbl_client:'Nome Cliente', placeholder_client:'es. Famiglia Smith',
     lbl_agency:'Nome Agenzia / DMC', placeholder_agency:'Lascia vuoto per rilevamento automatico',
     lbl_logo:'URL Logo Agenzia', lbl_lang:'Lingua', lbl_voice:'Voce',
     lang_en:'Inglese', lang_it:'Italiano', lang_fr:'Francese', lang_auto:'Rileva automaticamente',
@@ -894,7 +907,7 @@ const ADMIN_I18N = {
     ps_waiting:'In attesa…', ps_sending:'Invio al server…', ps_complete:'Completato',
     ps_failed:'Errore — controlla il log', ps_ready:'App viaggio pronta ✓',
     ps_stall_12:'Elaborazione in corso…',
-    ps_stall_30:'Claude sta elaborando, attendere…',
+    ps_stall_30:'Loomtrip sta elaborando, attendere…',
     ps_stall_60:'Ancora un momento, ci siamo quasi…',
     ps_stall_120:'File grande o molti extra — ancora in esecuzione…',
   },
@@ -903,7 +916,7 @@ const ADMIN_I18N = {
     lbl_pdf:'PDF Itinéraire', drop_pdf:'Déposez le PDF ici ou <strong>parcourir</strong>', or_paste:'ou coller le texte',
     lbl_text:'Texte Itinéraire', placeholder_text:'Collez ici l\'itinéraire du DMC…',
     lbl_color:'Couleur Marque', lbl_trip_name:'Nom du Voyage', placeholder_trip_name:'ex. Géorgie: Highlights du Caucase',
-    lbl_client:'Nom du Client', placeholder_client:'ex. Famille Zanotelli',
+    lbl_client:'Nom du Client', placeholder_client:'ex. Famille Smith',
     lbl_agency:'Nom Agence / DMC', placeholder_agency:'Laisser vide pour détection automatique',
     lbl_logo:'URL Logo Agence', lbl_lang:'Langue', lbl_voice:'Voix',
     lang_en:'Anglais', lang_it:'Italien', lang_fr:'Français', lang_auto:'Détection automatique',
@@ -929,7 +942,7 @@ const ADMIN_I18N = {
     ps_waiting:'En attente…', ps_sending:'Envoi au serveur…', ps_complete:'Terminé',
     ps_failed:'Erreur — voir le log', ps_ready:'App voyage prête ✓',
     ps_stall_12:'Traitement en cours…',
-    ps_stall_30:'Claude réfléchit, veuillez patienter…',
+    ps_stall_30:'Loomtrip réfléchit, veuillez patienter…',
     ps_stall_60:'Encore un instant, on y est presque…',
     ps_stall_120:'Fichier volumineux ou nombreux extras — toujours en cours…',
   }
@@ -985,6 +998,34 @@ function generateDraft() {
       document.getElementById('draft-text-section').style.display='';
     })
     .catch(e=>{ btn.disabled=false; btn.textContent='✨ Generate draft →'; document.getElementById('draft-status').style.display='none'; alert('Error: '+e); });
+}
+
+function toggleSidebar() {
+  const sb = document.getElementById('sidebar');
+  const btn = document.getElementById('sidebar-toggle-btn');
+  sb.classList.toggle('collapsed');
+  const collapsed = sb.classList.contains('collapsed');
+  btn.textContent = collapsed ? '▶' : '☰';
+  localStorage.setItem('loomtrip_sidebar_collapsed', collapsed ? '1' : '0');
+}
+// Restore sidebar state
+(function(){
+  if (localStorage.getItem('loomtrip_sidebar_collapsed') === '1') {
+    document.getElementById('sidebar').classList.add('collapsed');
+    const btn = document.getElementById('sidebar-toggle-btn');
+    if (btn) { btn.textContent = '▶'; }
+  }
+  document.getElementById('sidebar-toggle-btn').classList.add('show');
+})();
+
+function copyCode(code) {
+  navigator.clipboard.writeText(code).then(() => {
+    const t = document.createElement('div');
+    t.textContent = 'Code copied\!';
+    t.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#333;color:#fff;padding:8px 16px;border-radius:8px;font-size:13px;z-index:9999;pointer-events:none;';
+    document.body.appendChild(t);
+    setTimeout(() => t.remove(), 2000);
+  });
 }
 
 function logout() {
@@ -1424,6 +1465,8 @@ function applyFilters() {
   const svgEye   = '<svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
   const svgDown  = '<svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>';
   const svgTrash = '<svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>';
+  const svgCopy  = '<svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>';
+  const svgMail  = '<svg viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>';
   el.innerHTML =
     '<div class="trip-table-head">' +
     '<div class="trip-table-head-cell"></div>' +
@@ -1432,25 +1475,35 @@ function applyFilters() {
     '<div class="trip-table-head-cell">'+((ADMIN_I18N[adminLang]||ADMIN_I18N.en).col_lang)+'</div>' +
     '<div class="trip-table-head-cell">'+((ADMIN_I18N[adminLang]||ADMIN_I18N.en).col_date)+'</div>' +
     '<div class="trip-table-head-cell">'+((ADMIN_I18N[adminLang]||ADMIN_I18N.en).col_code)+'</div>' +
-    '<div class="trip-table-head-cell"></div></div>' +
-    list.map(b =>
-      '<div class="trip-row">' +
+    '<div class="trip-table-head-cell">Actions</div></div>' +
+    list.map(b => {
+      const code = b.code || '';
+      const dest = b.trip_name || b.destination || b.name;
+      const previewUrl = '/preview/'+b.id;
+      const emailSubj = encodeURIComponent('Your trip: '+dest);
+      const emailBody = encodeURIComponent('Hi,\n\nYour trip app is ready\!\n\nOpen it here: https://loomtrip.onrender.com\nAccess code: '+code+'\n\nHave a wonderful journey\!');
+      const mailtoLink = 'mailto:?subject='+emailSubj+'&body='+emailBody;
+      return '<div class="trip-row">' +
       '<div class="trip-row-cb"><input type="checkbox"></div>' +
-      '<div class="trip-col"><div class="trip-col-name">'+( b.destination || b.name )+'</div>' +
+      '<div class="trip-col"><div class="trip-col-name">'+dest+'</div>' +
       '<div class="trip-col-sub">'+b.name+' · '+b.days+' '+((ADMIN_I18N[adminLang]||ADMIN_I18N.en).days_label)+' · '+b.hotels+' '+((ADMIN_I18N[adminLang]||ADMIN_I18N.en).hotels_label)+' · '+b.size+'</div></div>' +
       '<div class="trip-col"><div class="trip-col-client">'+(b.client||'—')+'</div></div>' +
-      '<div class="trip-col"><span class="lang-chip">'+( (b.lang==='en'?'\uD83C\uDDEC\uD83C\uDDE7':b.lang==='it'?'\uD83C\uDDEE\uD83C\uDDF9':b.lang==='fr'?'\uD83C\uDDEB\uD83C\uDDF7':'')+' '+(b.lang||'').toUpperCase() )+'</span></div>' +
+      '<div class="trip-col"><span class="lang-chip">'+( (b.lang==='en'?'🇬🇧':b.lang==='it'?'🇮🇹':b.lang==='fr'?'🇫🇷':'')+' '+(b.lang||'').toUpperCase() )+'</span></div>' +
       '<div class="trip-col trip-col-date">'+dateStr(b.date)+'</div>' +
-      '<div class="trip-col"><span class="code-badge" id="code-badge-'+b.id+'" onclick="editCode(\''+b.id+'\')">' +
-      '\uD83D\uDD11 '+(b.code||'+ code')+'</span></div>' +
-      '<div class="trip-col"></div>' +
-      '<div class="row-actions">' +
+      '<div class="trip-col" style="display:flex;align-items:center;gap:3px;">' +
+      (code
+        ? '<span class="code-badge" onclick="editCode(\''+b.id+'\')">'+code+'</span>' +
+          '<button class="row-action-btn" onclick="copyCode(\''+code+'\')" title="Copy" style="width:22px;height:22px;">'+svgCopy+'</button>' +
+          '<a class="row-action-btn" href="'+mailtoLink+'" title="Email client" style="width:22px;height:22px;">'+svgMail+'</a>'
+        : '<button class="code-badge" style="opacity:.5;" onclick="editCode(\''+b.id+'\')">+ code</button>') +
+      '</div>' +
+      '<div class="trip-col" style="display:flex;align-items:center;gap:1px;">' +
+      '<a class="row-action-btn" href="'+previewUrl+'" target="_blank" title="Preview">'+svgEye+'</a>' +
       '<button class="row-action-btn" onclick="editBuild(\''+b.id+'\')" title="Edit">'+svgEdit+'</button>' +
-      '<a class="row-action-btn" href="/preview/'+b.id+'" target="_blank" title="Preview">'+svgEye+'</a>' +
       '<a class="row-action-btn" href="/download/'+b.id+'" download title="Download">'+svgDown+'</a>' +
       '<button class="row-action-btn danger" onclick="deleteBuild(\''+b.id+'\',\''+b.name+'\')" title="Delete">'+svgTrash+'</button>' +
-      '</div></div>'
-    ).join('');
+      '</div></div>';
+    }).join('');
 }
 
 
@@ -1695,58 +1748,66 @@ def log_stream(job_id):
 @app.route("/api/builds")
 @require_admin
 def list_builds():
+    try:
+      return _list_builds_inner()
+    except Exception as exc:
+      import traceback
+      app.logger.error("list_builds error: %s\n%s", exc, traceback.format_exc())
+      return jsonify({"error": str(exc)}), 500
+
+def _list_builds_inner():
     result = []
-    for d in sorted(BUILDS_DIR.iterdir(), key=lambda x: x.stat().st_mtime, reverse=True):
+    try:
+        entries = sorted(BUILDS_DIR.iterdir(), key=lambda x: x.stat().st_mtime, reverse=True)
+    except Exception:
+        entries = []
+    import datetime
+    all_codes = load_codes()
+    for d in entries:
         if not d.is_dir(): continue
         html = d / "index.html"
         if not html.exists(): continue
-        # Parse metadata
-        content = html.read_text(errors="ignore")
-        audio = len(list(d.glob("audio-*.mp3")))
-        # Day count: prefer narration-scripts.json (exact count), fall back to HTML
-        nj = d / "narration-scripts.json"
-        if nj.exists():
-            try:
-                days = len(json.loads(nj.read_text()))
-            except Exception:
-                days = 0
-        else:
-            days = len(re.findall(r'class="cal-day-num"', content))
-        hotels = len(re.findall(r'class="hotel-card"', content))
-        # Extract DMC name
-        m = re.search(r'class="app-header-brand">([^<]+)', content)
-        name = m.group(1) if m else d.name
-        size_kb = sum(f.stat().st_size for f in d.rglob("*") if f.is_file()) // 1024
-        # look up code
-        all_codes = load_codes()
-        code = next((k for k,v in all_codes.items() if v == d.name), None)
-        # Read saved meta for filter fields
-        meta = {}
-        meta_file = d / "meta.json"
-        if meta_file.exists():
-            try: meta = json.loads(meta_file.read_text())
-            except: pass
-        # Filter: only show this user's builds (legacy builds with no user_id visible to all)
-        build_user = meta.get("user_id")
-        if build_user and build_user != current_user_id():
+        try:
+            content = html.read_text(errors="ignore")
+            audio = len(list(d.glob("audio-*.mp3")))
+            nj = d / "narration-scripts.json"
+            if nj.exists():
+                try:
+                    days = len(json.loads(nj.read_text()))
+                except Exception:
+                    days = 0
+            else:
+                days = len(re.findall(r'class="cal-day-num"', content))
+            hotels = len(re.findall(r'class="hotel-card"', content))
+            m = re.search(r'class="app-header-brand">([^<]+)', content)
+            name = m.group(1) if m else d.name
+            size_kb = sum(f.stat().st_size for f in d.rglob("*") if f.is_file()) // 1024
+            code = next((k for k,v in all_codes.items() if v == d.name), None)
+            meta = {}
+            meta_file = d / "meta.json"
+            if meta_file.exists():
+                try: meta = json.loads(meta_file.read_text())
+                except: pass
+            build_user = meta.get("user_id")
+            if build_user and build_user != current_user_id():
+                continue
+            mt = re.search(r'<title>([^<]+)</title>', content)
+            destination = mt.group(1).strip() if mt else ""
+            mtime = d.stat().st_mtime
+            date_str = datetime.datetime.fromtimestamp(mtime).strftime("%Y-%m-%d")
+            result.append({
+                "id": d.name, "name": name, "days": days, "days_count": days,
+                "hotels": hotels, "audio": audio,
+                "size": f"{size_kb} KB", "code": code,
+                "destination": destination,
+                "client": meta.get("client_name", ""),
+                "lang": meta.get("lang", ""),
+                "trip_name": meta.get("trip_name", ""),
+                "date": date_str,
+            })
+        except Exception as e:
+            app.logger.warning("Skipping build %s: %s", d.name, e)
             continue
-        # Extract destination from HTML title
-        mt = re.search(r'<title>([^<]+)</title>', content)
-        destination = mt.group(1).strip() if mt else ""
-        # mtime as ISO date string
-        mtime = d.stat().st_mtime
-        import datetime
-        date_str = datetime.datetime.fromtimestamp(mtime).strftime("%Y-%m-%d")
-        result.append({
-            "id": d.name, "name": name, "days": days, "days_count": days,
-            "hotels": hotels, "audio": audio,
-            "size": f"{size_kb} KB", "code": code,
-            "destination": destination,
-            "client": meta.get("client_name", ""),
-            "lang": meta.get("lang", ""),
-            "trip_name": meta.get("trip_name", ""),
-            "date": date_str,
-        })
     return jsonify(result)
 
 @app.route("/api/build/<build_id>", methods=["DELETE"])
