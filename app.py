@@ -2000,7 +2000,7 @@ html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFo
     <div class="card-title">Your journey<br>awaits.</div>
     <div class="card-sub">Enter the access code sent by your travel specialist.</div>
 
-    <form onsubmit="submit(event)">
+    <form onsubmit="enterCode(event)">
       <div class="input-wrap">
         <input class="code-input" id="codeInput"
           type="text" maxlength="6"
@@ -2072,7 +2072,7 @@ inp.addEventListener('input',()=>{
 });
 
 // Submit
-async function submit(e){
+async function enterCode(e){
   e.preventDefault();
   const code = inp.value.trim();
   if(code.length<4){shake();return;}
