@@ -11,7 +11,7 @@ Usage:
 Requires: Flask, PyMuPDF, anthropic (all in deps/)
 """
 
-import sys, os, json, re, subprocess, threading, time, shutil, uuid, sqlite3, hashlib, secrets
+import sys, os, json, re, subprocess, threading, time, shutil, uuid, sqlite3, hashlib, secrets, urllib.parse
 from pathlib import Path
 
 _deps = os.path.join(os.path.dirname(os.path.abspath(__file__)), "deps")
@@ -125,24 +125,38 @@ html { font-size: 15px; }
 body { font-family: var(--sans); background: var(--main-bg); color: var(--text); line-height: 1.55; -webkit-font-smoothing: antialiased; display: flex; min-height: 100vh; }
 
 /* ── SIDEBAR ── */
+.sidebar-wrap {
+  position: sticky; top: 0; height: 100vh;
+  display: flex; flex-shrink: 0;
+  transition: width 0.25s;
+  width: 380px;
+}
+.sidebar-wrap.collapsed { width: 0; }
 .sidebar {
   width: 380px; min-width: 380px; background: var(--sidebar-bg);
   display: flex; flex-direction: column;
-  position: sticky; top: 0; height: 100vh; overflow-y: auto;
+  height: 100vh; overflow-y: auto;
   border-right: 1px solid var(--sidebar-border);
-  transition: width 0.25s, min-width 0.25s;
+  transition: transform 0.25s, opacity 0.2s;
+  transform-origin: left center;
 }
-.sidebar.collapsed { width: 0; min-width: 0; overflow: hidden; border-right: none; }
-.sidebar-toggle-btn {
-  position: fixed; top: 18px; left: 18px; z-index: 200;
-  width: 32px; height: 32px; border-radius: 8px;
-  background: var(--sidebar-bg); border: 1px solid var(--sidebar-border);
-  color: rgba(255,255,255,0.6); cursor: pointer; font-size: 14px;
-  display: none; align-items: center; justify-content: center;
-  transition: .15s;
+.sidebar-wrap.collapsed .sidebar { transform: translateX(-380px); opacity: 0; pointer-events: none; }
+/* Arrow tab on the right edge of the sidebar */
+.sidebar-tab {
+  position: absolute; right: -14px; top: 50%;
+  transform: translateY(-50%);
+  width: 14px; height: 48px;
+  background: var(--sidebar-bg);
+  border: 1px solid var(--sidebar-border);
+  border-left: none;
+  border-radius: 0 6px 6px 0;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; z-index: 10;
+  color: rgba(255,255,255,0.45);
+  font-size: 9px;
+  transition: color .15s, background .15s;
 }
-.sidebar-toggle-btn.show { display: flex; }
-.sidebar-toggle-btn:hover { color: #fff; background: rgba(255,255,255,0.08); }
+.sidebar-tab:hover { color: #fff; background: rgba(255,255,255,0.06); }
 .sidebar-header {
   padding: 28px 28px 20px;
   border-bottom: 1px solid var(--sidebar-border);
@@ -562,15 +576,17 @@ label {
 
 @media(max-width: 860px) {
   body { flex-direction: column; }
-  .sidebar { width: 100%; min-width: unset; height: auto; position: static; }
+  .sidebar-wrap { width: 100% !important; height: auto; position: static; }
+  .sidebar { width: 100%; min-width: unset; height: auto; }
+  .sidebar-tab { display: none; }
   .main { padding: 24px 20px; }
 }
 </style>
 </head>
 <body>
 
-<button class="sidebar-toggle-btn" id="sidebar-toggle-btn" onclick="toggleSidebar()" title="Toggle sidebar">☰</button>
 <!-- ── SIDEBAR ── -->
+<div class="sidebar-wrap" id="sidebar-wrap">
 <aside class="sidebar" id="sidebar">
   <div class="sidebar-header">
     <div style="display:flex;align-items:center;justify-content:space-between;">
@@ -782,6 +798,8 @@ label {
     </button>
   </div>
 </aside>
+<button class="sidebar-tab" id="sidebar-tab" onclick="toggleSidebar()" title="Toggle sidebar">&#9664;</button>
+</div>
 
 <!-- ── MAIN ── -->
 <main class="main">
@@ -1001,21 +1019,24 @@ function generateDraft() {
 }
 
 function toggleSidebar() {
-  const sb = document.getElementById('sidebar');
-  const btn = document.getElementById('sidebar-toggle-btn');
-  sb.classList.toggle('collapsed');
-  const collapsed = sb.classList.contains('collapsed');
-  btn.textContent = collapsed ? '▶' : '☰';
+  const wrap = document.getElementById('sidebar-wrap');
+  const tab  = document.getElementById('sidebar-tab');
+  wrap.classList.toggle('collapsed');
+  const collapsed = wrap.classList.contains('collapsed');
+  // ◀ when open (click to collapse), ▶ when collapsed (click to expand)
+  tab.innerHTML = collapsed ? '&#9654;' : '&#9664;';
   localStorage.setItem('loomtrip_sidebar_collapsed', collapsed ? '1' : '0');
 }
-// Restore sidebar state
+// Restore sidebar state on load
 (function(){
   if (localStorage.getItem('loomtrip_sidebar_collapsed') === '1') {
-    document.getElementById('sidebar').classList.add('collapsed');
-    const btn = document.getElementById('sidebar-toggle-btn');
-    if (btn) { btn.textContent = '▶'; }
+    const wrap = document.getElementById('sidebar-wrap');
+    if (wrap) {
+      wrap.classList.add('collapsed');
+      const tab = document.getElementById('sidebar-tab');
+      if (tab) tab.innerHTML = '&#9654;';
+    }
   }
-  document.getElementById('sidebar-toggle-btn').classList.add('show');
 })();
 
 function copyCode(code) {
@@ -2209,8 +2230,14 @@ body{min-height:100vh;background:#0F0E0D;display:flex;align-items:center;justify
 .card{background:#1a1917;border:1px solid rgba(255,255,255,0.08);border-radius:20px;padding:48px 40px;width:100%;max-width:420px;box-shadow:0 32px 80px rgba(0,0,0,0.5)}
 .logo{font-family:'Playfair Display',Georgia,serif;font-size:28px;color:#fff;text-align:center;letter-spacing:-0.5px;margin-bottom:8px}
 .logo span{color:#C4873A}
-.tagline{text-align:center;color:rgba(255,255,255,0.38);font-size:13px;margin-bottom:36px}
-.tabs{display:flex;background:rgba(255,255,255,0.05);border-radius:10px;padding:4px;margin-bottom:32px;gap:4px}
+.tagline{text-align:center;color:rgba(255,255,255,0.38);font-size:13px;margin-bottom:32px}
+.google-btn{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;padding:12px;background:#fff;border:none;border-radius:10px;color:#1f1f1f;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit;transition:.15s;text-decoration:none;margin-bottom:20px}
+.google-btn:hover{background:#f1f1f1;box-shadow:0 2px 8px rgba(0,0,0,0.25)}
+.google-btn svg{width:20px;height:20px;flex-shrink:0}
+.divider-row{display:flex;align-items:center;gap:12px;margin-bottom:20px}
+.divider-row hr{flex:1;border:none;border-top:1px solid rgba(255,255,255,0.1)}
+.divider-row span{color:rgba(255,255,255,0.25);font-size:12px;white-space:nowrap}
+.tabs{display:flex;background:rgba(255,255,255,0.05);border-radius:10px;padding:4px;margin-bottom:24px;gap:4px}
 .tab{flex:1;text-align:center;padding:9px;border-radius:7px;font-size:13px;font-weight:500;color:rgba(255,255,255,0.45);cursor:pointer;transition:.15s;border:none;background:none}
 .tab.active{background:rgba(196,135,58,0.85);color:#fff}
 .form{display:none;flex-direction:column;gap:16px}
@@ -2222,9 +2249,8 @@ input::placeholder{color:rgba(255,255,255,0.25)}
 .btn{width:100%;padding:13px;background:#C4873A;border:none;border-radius:10px;color:#fff;font-size:14px;font-weight:600;cursor:pointer;margin-top:4px;font-family:inherit;transition:.15s;letter-spacing:.01em}
 .btn:hover{background:#d4974a}
 .btn:disabled{opacity:.5;cursor:not-allowed}
-.err{color:#e05252;font-size:13px;text-align:center;padding:10px;background:rgba(224,82,82,0.08);border-radius:8px;display:none}
+.err{color:#e05252;font-size:13px;text-align:center;padding:10px;background:rgba(224,82,82,0.08);border-radius:8px;display:none;margin-bottom:8px}
 .err.show{display:block}
-.divider{text-align:center;color:rgba(255,255,255,0.2);font-size:12px;margin:4px 0}
 </style>
 </head>
 <body>
@@ -2232,12 +2258,26 @@ input::placeholder{color:rgba(255,255,255,0.25)}
   <div class="logo">Loom<span>trip</span></div>
   <div class="tagline">Luxury travel, beautifully presented</div>
 
+  <div id="err" class="err"></div>
+
+  <!-- Google Sign-In (shown only if configured) -->
+  {% if google_enabled %}
+  <a href="/auth/google" class="google-btn">
+    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+      <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+      <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+      <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+    </svg>
+    Continue with Google
+  </a>
+  <div class="divider-row"><hr><span>or use email</span><hr></div>
+  {% endif %}
+
   <div class="tabs">
     <button class="tab active" onclick="switchTab('login')">Sign in</button>
     <button class="tab" onclick="switchTab('signup')">Create account</button>
   </div>
-
-  <div id="err" class="err"></div>
 
   <!-- LOGIN -->
   <form id="form-login" class="form active" onsubmit="doAuth(event,'login')">
@@ -2298,15 +2338,94 @@ function doAuth(ev, type) {
 }
 const p = new URLSearchParams(location.search);
 if(p.get('tab')==='signup') switchTab('signup');
+if(p.get('error')) showErr(decodeURIComponent(p.get('error')));
 </script>
 </body>
 </html>"""
+
+GOOGLE_CLIENT_ID     = os.environ.get("GOOGLE_CLIENT_ID", "")
+GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
+GOOGLE_AUTH_URL      = "https://accounts.google.com/o/oauth2/v2/auth"
+GOOGLE_TOKEN_URL     = "https://oauth2.googleapis.com/token"
+GOOGLE_USERINFO_URL  = "https://www.googleapis.com/oauth2/v3/userinfo"
+
+def _google_redirect_uri():
+    """Always use the canonical Render URL so the redirect URI matches what's
+    registered in Google Cloud Console."""
+    base = os.environ.get("LOOMTRIP_BASE_URL", request.host_url.rstrip("/"))
+    return base + "/auth/google/callback"
 
 @app.route("/login")
 def login_page():
     if current_user_id():
         return redirect("/admin")
-    return render_template_string(AUTH_HTML)
+    return render_template_string(AUTH_HTML, google_enabled=bool(GOOGLE_CLIENT_ID))
+
+@app.route("/auth/google")
+def google_auth():
+    if not GOOGLE_CLIENT_ID:
+        return redirect("/login?error=Google+sign-in+is+not+configured")
+    state = secrets.token_urlsafe(16)
+    session["oauth_state"] = state
+    params = {
+        "client_id":     GOOGLE_CLIENT_ID,
+        "redirect_uri":  _google_redirect_uri(),
+        "response_type": "code",
+        "scope":         "openid email profile",
+        "state":         state,
+        "access_type":   "online",
+        "prompt":        "select_account",
+    }
+    return redirect(GOOGLE_AUTH_URL + "?" + urllib.parse.urlencode(params))
+
+@app.route("/auth/google/callback")
+def google_callback():
+    import requests as req_lib
+    error = request.args.get("error")
+    if error:
+        return redirect("/login?error=" + urllib.parse.quote(error))
+    state = request.args.get("state", "")
+    if state != session.pop("oauth_state", None):
+        return redirect("/login?error=Invalid+state+parameter")
+    code = request.args.get("code", "")
+    if not code:
+        return redirect("/login?error=No+authorization+code")
+    # Exchange code for tokens
+    try:
+        tok = req_lib.post(GOOGLE_TOKEN_URL, data={
+            "code":          code,
+            "client_id":     GOOGLE_CLIENT_ID,
+            "client_secret": GOOGLE_CLIENT_SECRET,
+            "redirect_uri":  _google_redirect_uri(),
+            "grant_type":    "authorization_code",
+        }, timeout=10)
+        tok.raise_for_status()
+        access_token = tok.json()["access_token"]
+        info = req_lib.get(GOOGLE_USERINFO_URL,
+                           headers={"Authorization": "Bearer " + access_token}, timeout=10)
+        info.raise_for_status()
+        gdata = info.json()
+    except Exception as exc:
+        app.logger.error("Google OAuth error: %s", exc)
+        return redirect("/login?error=Google+authentication+failed")
+    email = (gdata.get("email") or "").lower().strip()
+    name  = gdata.get("name") or gdata.get("given_name") or email.split("@")[0]
+    if not email:
+        return redirect("/login?error=Could+not+get+email+from+Google")
+    # Find or create user
+    user = _get_user(email)
+    if user:
+        uid = user["id"]
+    else:
+        uid = str(uuid.uuid4())
+        with _db() as con:
+            con.execute("INSERT INTO users (id,email,name,pw_hash,created) VALUES (?,?,?,?,?)",
+                        (uid, email, name, "", time.strftime("%Y-%m-%dT%H:%M:%SZ")))
+            con.commit()
+    session.permanent = True
+    session["user_id"]   = uid
+    session["user_name"] = name
+    return redirect("/admin")
 
 @app.route("/api/auth/login", methods=["POST"])
 def api_login():
@@ -2349,6 +2468,23 @@ def api_signup():
 def api_logout():
     session.clear()
     return jsonify({"ok": True})
+
+@app.route("/api/debug/auth")
+@require_login
+def debug_auth():
+    """Quick health-check for the auth DB — only accessible when logged in."""
+    try:
+        with _db() as con:
+            users = con.execute("SELECT id, email, name, created FROM users ORDER BY created").fetchall()
+        return jsonify({
+            "db_path": str(DB_PATH),
+            "db_exists": DB_PATH.exists(),
+            "user_count": len(users),
+            "users": [{"id": u["id"][:8]+"…", "email": u["email"], "name": u["name"], "created": u["created"]} for u in users],
+            "current_user_id": current_user_id(),
+        })
+    except Exception as e:
+        return jsonify({"error": str(e), "db_path": str(DB_PATH)}), 500
 
 @app.route("/api/draft", methods=["POST"])
 @require_login
