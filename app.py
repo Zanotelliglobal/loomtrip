@@ -1809,9 +1809,8 @@ def _list_builds_inner():
             if meta_file.exists():
                 try: meta = json.loads(meta_file.read_text())
                 except: pass
-            build_user = meta.get("user_id")
-            if build_user and build_user != current_user_id():
-                continue
+            # Show all builds to any authenticated user (single-admin setup)
+            # user_id in meta is kept for future multi-tenant support but not filtered on
             mt = re.search(r'<title>([^<]+)</title>', content)
             destination = mt.group(1).strip() if mt else ""
             mtime = d.stat().st_mtime
@@ -1895,7 +1894,7 @@ def download(build_id):
                     headers={"Content-Disposition": f"attachment; filename=loomtrip-demo-{build_id}.zip"})
 
 # ─── code → build mapping ────────────────────────────────────────────────────
-CODES_FILE = BASE_DIR / "codes.json"
+CODES_FILE = BUILDS_DIR / "codes.json"  # persistent disk — survives redeploys
 
 def load_codes():
     if CODES_FILE.exists():
