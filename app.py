@@ -1042,8 +1042,8 @@ function toggleSidebar() {
 function copyCode(code) {
   navigator.clipboard.writeText(code).then(() => {
     const t = document.createElement('div');
-    t.textContent = 'Code copied\!';
-    t.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#333;color:#fff;padding:8px 16px;border-radius:8px;font-size:13px;z-index:9999;pointer-events:none;';
+    t.textContent = '✓ Code copied';
+    t.style.cssText = 'position:fixed;bottom:28px;left:50%;transform:translateX(-50%);background:#fff;color:#111;padding:9px 20px;border-radius:10px;font-size:13px;font-weight:500;z-index:9999;pointer-events:none;box-shadow:0 4px 20px rgba(0,0,0,0.18);';
     document.body.appendChild(t);
     setTimeout(() => t.remove(), 2000);
   });
@@ -1514,15 +1514,15 @@ function applyFilters() {
       '<div class="trip-col" style="display:flex;align-items:center;gap:3px;">' +
       (code
         ? '<span class="code-badge" onclick="editCode(\''+b.id+'\')">'+code+'</span>' +
-          '<button class="row-action-btn" onclick="copyCode(\''+code+'\')" title="Copy" style="width:22px;height:22px;">'+svgCopy+'</button>' +
-          '<a class="row-action-btn" href="'+mailtoLink+'" title="Email client" style="width:22px;height:22px;">'+svgMail+'</a>'
+          '<button class="row-action-btn" onclick="copyCode(\''+code+'\')" style="width:22px;height:22px;">'+svgCopy+'</button>' +
+          '<a class="row-action-btn" href="'+mailtoLink+'" style="width:22px;height:22px;">'+svgMail+'</a>'
         : '<button class="code-badge" style="opacity:.5;" onclick="editCode(\''+b.id+'\')">+ code</button>') +
       '</div>' +
       '<div class="trip-col" style="display:flex;align-items:center;gap:1px;">' +
-      '<a class="row-action-btn" href="'+previewUrl+'" target="_blank" title="Preview">'+svgEye+'</a>' +
-      '<button class="row-action-btn" onclick="editBuild(\''+b.id+'\')" title="Edit">'+svgEdit+'</button>' +
-      '<a class="row-action-btn" href="/download/'+b.id+'" download title="Download">'+svgDown+'</a>' +
-      '<button class="row-action-btn danger" onclick="deleteBuild(\''+b.id+'\',\''+b.name+'\')" title="Delete">'+svgTrash+'</button>' +
+      '<a class="row-action-btn" href="'+previewUrl+'" target="_blank">'+svgEye+'</a>' +
+      '<button class="row-action-btn" onclick="editBuild(\''+b.id+'\')">'+svgEdit+'</button>' +
+      '<a class="row-action-btn" href="/download/'+b.id+'" download>'+svgDown+'</a>' +
+      '<button class="row-action-btn danger" onclick="deleteBuild(\''+b.id+'\',\''+b.name+'\')">'+svgTrash+'</button>' +
       '</div></div>';
     }).join('');
 }
