@@ -1077,8 +1077,8 @@ function applyAdminLang() {
     btn.style.background = active ? 'rgba(196,135,58,0.8)' : 'transparent';
     btn.style.color = active ? '#fff' : 'rgba(255,255,255,0.4)';
   });
-  // Re-render table with new labels if data loaded
-  if (allBuilds.length) applyFilters();
+  // Re-render table with new labels (always — empty state also needs translation)
+  applyFilters();
 }
 
 // ─── Toggle ───────────────────────────────────────────────────────────────────
