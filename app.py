@@ -33,7 +33,7 @@ BUILDS_DIR = Path(os.environ.get("LOOMTRIP_BUILDS_DIR", str(BASE_DIR / "builds")
 BUILDS_DIR.mkdir(parents=True, exist_ok=True)
 
 # ─── User DB (SQLite on persistent disk) ─────────────────────────────────────
-DB_PATH = BUILDS_DIR.parent / "users.db"
+DB_PATH = BUILDS_DIR / "users.db"
 
 def _db():
     con = sqlite3.connect(str(DB_PATH))
@@ -2052,7 +2052,7 @@ input::placeholder{color:rgba(255,255,255,0.25)}
   <div id="err" class="err"></div>
 
   <!-- LOGIN -->
-  <form id="form-login" class="form active" onsubmit="submit(event,'login')">
+  <form id="form-login" class="form active" onsubmit="doAuth(event,'login')">
     <div>
       <label>Email</label>
       <input type="email" id="l-email" placeholder="you@agency.com" autocomplete="email" required>
@@ -2065,7 +2065,7 @@ input::placeholder{color:rgba(255,255,255,0.25)}
   </form>
 
   <!-- SIGNUP -->
-  <form id="form-signup" class="form" onsubmit="submit(event,'signup')">
+  <form id="form-signup" class="form" onsubmit="doAuth(event,'signup')">
     <div>
       <label>Your name</label>
       <input type="text" id="s-name" placeholder="Sofia Rossi" autocomplete="name" required>
@@ -2092,7 +2092,7 @@ function showErr(msg) {
   const e = document.getElementById('err');
   e.textContent = msg; e.classList.add('show');
 }
-function submit(ev, type) {
+function doAuth(ev, type) {
   ev.preventDefault();
   const btn = document.getElementById('btn-'+type);
   btn.disabled = true; btn.textContent = 'Please wait…';
